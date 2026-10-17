@@ -13,8 +13,9 @@ router = APIRouter(prefix="/payments")
 
 
 @router.post("/setup-session")
-def setup_session(body: SetupSessionBody | None = None, user: User = Depends(current_user)):
-    return {"url": payments.create_setup_session(user, body.return_to if body else None)}
+def setup_session(body: SetupSessionBody | None = None, user: User = Depends(current_user),
+                  session: Session = Depends(get_session)):
+    return {"url": payments.create_setup_session(session, user, body.return_to if body else None)}
 
 
 @router.post("/confirm-setup")
