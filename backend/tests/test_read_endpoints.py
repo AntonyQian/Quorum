@@ -7,7 +7,7 @@ import pytest
 from app.models import Pool, PoolMember, Product, Retailer, Tier, User
 from app.services import clock, pool_engine
 
-from tests.conftest import T0
+from tests.conftest import T0, as_user, assert_error
 
 USER_KEYS = {"id", "name", "role", "retailer_id", "card_label", "is_simulated"}
 CARD_KEYS = {"id", "name", "image_url", "category", "style_tags", "retailer_name", "list_price_cents"}
@@ -86,18 +86,6 @@ def world(session):
     return dict(alice=alice, bob=bob, owner=owner, sims=sims, sofa_pool=sofa_pool,
                 table_pool=table_pool, oak=oak)
 
-
-def as_user(user):
-    return {"X-User-Id": str(user.id)}
-
-
-def assert_error(response, status, code):
-    assert response.status_code == status, response.text
-    body = response.json()
-    assert set(body) == {"detail"}
-    assert set(body["detail"]) == {"code", "message"}
-    assert body["detail"]["code"] == code
-    assert isinstance(body["detail"]["message"], str) and body["detail"]["message"]
 
 
 # --- accounts ----------------------------------------------------------------

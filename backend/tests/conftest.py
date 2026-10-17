@@ -1,4 +1,5 @@
-"""Shared fixtures: an in-memory SQLite engine, a session on it, and a TestClient wired to that session."""
+"""Shared fixtures and helpers: an in-memory SQLite engine, a session on it, a TestClient wired to that
+session, and helpers for acting as a user and checking SPEC §3 errors."""
 
 from datetime import datetime
 
@@ -15,9 +16,14 @@ from app.services import clock
 T0 = datetime(2026, 10, 17, 12, 0, 0)
 
 
+def make_engine():
+    """A fresh, empty in-memory SQLite engine shared across threads (no tables created)."""
+    return create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+
+
 @pytest.fixture
 def engine():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = make_engine()
     SQLModel.metadata.create_all(engine)
     yield engine
     engine.dispose()
@@ -40,3 +46,16 @@ def client(engine):
     # No `with`: skip the lifespan so tests never touch the on-disk database.
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+def as_user(user):
+    return {"X-User-Id": str(user.id)}
+
+
+def assert_error(response, status, code):
+    assert response.status_code == status, response.text
+    body = response.json()
+    assert set(body) == {"detail"}
+    assert set(body["detail"]) == {"code", "message"}
+    assert body["detail"]["code"] == code
+    assert isinstance(body["detail"]["message"], str) and body["detail"]["message"]

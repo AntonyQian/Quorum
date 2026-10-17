@@ -1,4 +1,4 @@
-"""Response shapes (SPEC §8)."""
+"""Request and response shapes (SPEC §8)."""
 
 from typing import Literal
 
@@ -69,3 +69,11 @@ class PoolDetail(PoolSummary):
     product: ProductDetailCard
     my_membership: MyMembership | None
     final_price_cents: int | None
+
+
+class SetupSessionBody(BaseModel):
+    return_to: str | None = None
+
+
+class ConfirmSetupBody(BaseModel):
+    session_id: str

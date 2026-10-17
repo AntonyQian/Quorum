@@ -1,23 +1,15 @@
 """Payment endpoints (SPEC §8): save a card through the payments adapter (mock or Stripe)."""
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.db import get_session
 from app.deps import current_user
 from app.models import User
+from app.schemas import ConfirmSetupBody, SetupSessionBody
 from app.services import payments
 
 router = APIRouter(prefix="/payments")
-
-
-class SetupSessionBody(BaseModel):
-    return_to: str | None = None
-
-
-class ConfirmSetupBody(BaseModel):
-    session_id: str
 
 
 @router.post("/setup-session")

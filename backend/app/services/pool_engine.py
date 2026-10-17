@@ -49,6 +49,14 @@ def current_price(product: Product, tiers: list[Tier], count: int) -> int:
     return tier_price(product, tier)
 
 
+def charge_member(session: Session, member: PoolMember, user: User, price: int) -> bool:
+    """Charge one Member at `price` and set them `charged` or `payment_failed`. Does not commit."""
+    ok = payments.charge(session, member, user, price)
+    member.status = "charged" if ok else "payment_failed"
+    session.add(member)
+    return ok
+
+
 def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> Pool:
     """Apply every pending state transition to the Pool, then commit."""
     now = now or clock.now(session)
@@ -63,16 +71,12 @@ def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> 
             pool.locked_at = now
             price = tier_price(product, current_tier(tiers, count))
             for m in get_members(session, pool, ("pending",)):
-                user = session.get(User, m.user_id)
-                if payments.charge(session, m, user, price):
-                    m.status = "charged"
+                if charge_member(session, m, session.get(User, m.user_id), price):
                     notify(session, m.user_id, "pool_locked", f"{product.name} pool locked",
                            f"You were charged ${price / 100:,.2f}.", link)
                 else:
-                    m.status = "payment_failed"
                     notify(session, m.user_id, "payment_failed", f"Payment failed for {product.name}",
                            "Your card was declined, so you were dropped from the pool.", link)
-                session.add(m)
             notify_retailer(session, product.retailer_id, "pool_locked", f"{product.name} pool locked",
                             f"{count} members reached Tier 1.", f"/retailer/pools/{pool.id}")
         elif now >= pool.deadline:

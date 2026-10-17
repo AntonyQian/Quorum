@@ -9,8 +9,7 @@ from app import config
 from app.models import Payment, Pool, PoolMember, Product, Retailer, Tier, User
 from app.services import clock
 
-from tests.conftest import T0
-from tests.test_read_endpoints import as_user, assert_error
+from tests.conftest import T0, as_user, assert_error
 
 
 @pytest.fixture
@@ -131,6 +130,36 @@ def test_join_when_stock_cap_is_full_is_stock_cap_reached(client, session, world
     assert_error(join(client, pool, world["bob"]), 409, "stock_cap_reached")
 
 
+def test_cardless_join_on_a_full_pool_is_stock_cap_reached_not_card_required(client, session, world):
+    pool = world["pool"]
+    pool.stock_cap = 2
+    session.add(pool)
+    session.commit()
+    join(client, pool, world["sims"][0])
+    join(client, pool, world["sims"][1])
+    assert_error(join(client, pool, world["alice"]), 409, "stock_cap_reached")
+
+
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_cardless_join_on_a_closed_pool_is_pool_not_joinable_not_card_required(client, session, world, status):
+    pool = world["pool"]
+    pool.status = status
+    session.add(pool)
+    session.commit()
+    assert_error(join(client, pool, world["alice"]), 409, "pool_not_joinable")
+
+
+def test_join_locked_pool_whose_stock_cap_is_now_full_settles_it_and_is_pool_not_joinable(client, session, world):
+    pool = world["pool"]
+    lock_with(client, pool, world["sims"][:3])  # locked at Tier 1 with 3 members, no cap yet
+    pool = session.get(Pool, pool.id)
+    pool.stock_cap = 3
+    session.add(pool)
+    session.commit()
+    assert_error(join(client, pool, world["bob"]), 409, "pool_not_joinable")
+    assert client.get(f"/api/pools/{pool.id}").json()["status"] == "completed"
+
+
 # --- leave and re-join -------------------------------------------------------
 
 def test_leave_open_pool_marks_the_member_left(client, world):
@@ -209,10 +238,9 @@ def test_payment_failed_member_can_rejoin_with_a_working_card_on_the_same_row(cl
     pool, dee = world["pool"], world["decliner"]
     lock_with(client, pool, world["sims"][:3])
     join(client, pool, dee)
-    dee_row = session.get(User, dee.id)
-    dee_row.card_declines = False  # Dee saved a working card
-    session.add(dee_row)
-    session.commit()
+    saved = client.post("/api/payments/confirm-setup", json={"session_id": f"mock_{dee.id}"},
+                        headers=as_user(dee))
+    assert saved.status_code == 200, saved.text
     r = join(client, pool, dee)
     assert r.status_code == 200, r.text
     assert r.json()["my_membership"]["status"] == "charged"

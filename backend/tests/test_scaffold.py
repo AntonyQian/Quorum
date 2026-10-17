@@ -6,13 +6,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import inspect
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine, func, select
+from sqlmodel import Session, func, select
 
 from app import config
 from app.models import Pool, Product, Retailer, User
 from app.services import clock
 from seed import seed as seed_module
+
+from tests.conftest import make_engine
 
 SPEC_TABLES = {
     "retailers", "users", "products", "pools", "tiers", "pool_members",
@@ -22,7 +23,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 
 def fresh_engine():
-    return create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    return make_engine()
 
 
 def counts(engine) -> dict[str, int]:

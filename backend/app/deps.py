@@ -2,8 +2,8 @@ from fastapi import Depends, Header
 from sqlmodel import Session
 
 from app.db import get_session
-from app.errors import api_error, forbidden
-from app.models import User
+from app.errors import api_error, forbidden, not_found
+from app.models import Pool, User
 
 
 def optional_user(
@@ -26,3 +26,11 @@ def retailer_user(user: User = Depends(current_user)) -> User:
     if user.role != "retailer":
         raise forbidden("Retailer account required")
     return user
+
+
+def get_pool_or_404(pool_id: int, session: Session = Depends(get_session)) -> Pool:
+    """The Pool named by the `pool_id` path parameter, or 404 `not_found`."""
+    pool = session.get(Pool, pool_id)
+    if pool is None:
+        raise not_found("Pool")
+    return pool
