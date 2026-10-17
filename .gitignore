@@ -20,3 +20,10 @@ out/
 .DS_Store
 Thumbs.db
 .scratch/
+
+# Agent tooling (local only)
+.agents/
+.claude/
+.cursor/
+CLAUDE.md
+skills-lock.json
