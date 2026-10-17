@@ -8,28 +8,40 @@ import pytest
 from sqlmodel import select
 
 from app import config
-from app.models import Payment, Pool, PoolMember, Product, Retailer, Tier, User
+from app.models import Notification, Payment, Pool, PoolMember, Product, Retailer, Tier, User
 from app.services import payments
 from tests.conftest import T0, as_user, assert_error
 
 
-class FakeCardError(Exception):
+class FakeStripeError(Exception):
+    pass
+
+
+class FakeAPIConnectionError(FakeStripeError):
+    """Not a card problem: the request never got a usable answer from Stripe."""
+
+
+class FakeCardError(FakeStripeError):
     def __init__(self, message, payment_intent_id=""):
         super().__init__(message)
         self.error = SimpleNamespace(payment_intent=SimpleNamespace(id=payment_intent_id) if payment_intent_id else None)
 
 
 class FakeStripe:
-    """Records every SDK call. Payment methods named in `failing_pms` decline when charged."""
+    """Records every SDK call. Payment methods named in `failing_pms` decline when charged. While `outage` is
+    true, PaymentIntents and Refunds fail with a connection error; `failing_refund_calls` lists which
+    Refund.create calls (1-based) fail that way."""
 
     CardError = FakeCardError
-    StripeError = Exception
+    StripeError = FakeStripeError
 
     def __init__(self):
         self.api_key = None
         self.calls: list[tuple[str, dict]] = []
         self.failing_pms = {"pm_card_chargeCustomerFail"}
         self.checkout_sessions: dict[str, SimpleNamespace] = {}
+        self.outage = False
+        self.failing_refund_calls: set[int] = set()
         self._n = 0
         fake = self
 
@@ -47,9 +59,16 @@ class FakeStripe:
             return s
 
         def make_pi(obj_id, **kw):
+            if fake.outage:
+                raise FakeAPIConnectionError("Could not connect to Stripe.")
             if kw["payment_method"] in fake.failing_pms:
                 raise FakeCardError("Your card was declined.", payment_intent_id=obj_id)
             return SimpleNamespace(id=obj_id, status="succeeded", **kw)
+
+        def make_refund(obj_id, **kw):
+            if fake.outage or len(fake.named("Refund.create")) in fake.failing_refund_calls:
+                raise FakeAPIConnectionError("Could not connect to Stripe.")
+            return SimpleNamespace(id=obj_id, **kw)
 
         def attach(obj_id, pm, **kw):
             # Attaching a test token like pm_card_visa yields a new PaymentMethod that behaves like it.
@@ -60,7 +79,7 @@ class FakeStripe:
         self.Customer = SimpleNamespace(create=rec("Customer.create", "cus"))
         self.PaymentMethod = SimpleNamespace(attach=rec("PaymentMethod.attach", "pm", attach))
         self.PaymentIntent = SimpleNamespace(create=rec("PaymentIntent.create", "pi", make_pi))
-        self.Refund = SimpleNamespace(create=rec("Refund.create", "re"))
+        self.Refund = SimpleNamespace(create=rec("Refund.create", "re", make_refund))
         self.checkout = SimpleNamespace(Session=SimpleNamespace(
             create=rec("checkout.Session.create", "cs", make_checkout),
             retrieve=self._retrieve,
@@ -230,7 +249,7 @@ def test_a_simulated_shoppers_stripe_customer_is_reused_across_charges(session, 
         member = PoolMember(pool_id=table_pool.id, user_id=sim.id, joined_at=T0)
         session.add(member)
         session.commit()
-        assert payments.charge(session, member, sim, amount)
+        assert payments.charge(session, member, sim, amount) == payments.SUCCEEDED
 
     assert len(fake_stripe.named("Customer.create")) == 1
     assert len(fake_stripe.named("PaymentMethod.attach")) == 1
@@ -242,6 +261,114 @@ def test_a_real_shopper_without_a_stripe_card_is_declined_without_calling_stripe
     session.add(member)
     session.commit()
 
-    assert payments.charge(session, member, bob, 1_000) is False
+    assert payments.charge(session, member, bob, 1_000) == payments.DECLINED
     assert fake_stripe.named("PaymentIntent.create") == []
     assert session.exec(select(Payment)).one().status == "failed"
+
+
+# --- Stripe failures ----------------------------------------------------------
+
+def lock_then_reach_tier_two(client, pid):
+    """3 join and Lock at Tier 1 ($900), then 2 more join: the 4th pays $900, the 5th reaches Tier 2 at $850."""
+    client.post(f"/api/demo/pools/{pid}/simulate-joins", json={"count": 3})
+    client.post(f"/api/demo/pools/{pid}/simulate-joins", json={"count": 2})
+
+
+def member_statuses(session):
+    session.expire_all()
+    return sorted(m.status for m in session.exec(select(PoolMember)).all())
+
+
+def test_a_failed_tier_refund_is_recorded_and_settlement_retries_only_what_is_still_owed(
+        client, session, fake_stripe, table_pool):
+    pid = table_pool.id
+    lock_then_reach_tier_two(client, pid)
+    fake_stripe.failing_refund_calls = {2}
+
+    client.post("/api/demo/clock/advance", json={"to_deadline_of_pool": pid})
+
+    # One of the four $50 Tier Refunds failed: the other three are kept, and the Pool waits to settle.
+    # (Read from the DB: a GET would evaluate the Pool and retry.)
+    session.expire_all()
+    assert session.get(Pool, pid).status == "locked"
+    assert session.exec(select(Notification).where(Notification.kind == "tier_refund")).all() == []
+    refund_rows = session.exec(select(Payment).where(Payment.kind == "refund")).all()
+    assert sorted(p.status for p in refund_rows) == ["failed", "succeeded", "succeeded", "succeeded"]
+
+    client.post("/api/demo/clock/advance", json={"hours": 1})
+
+    assert client.get(f"/api/pools/{pid}").json()["status"] == "completed"
+    calls = fake_stripe.named("Refund.create")
+    assert len(calls) == 5  # four refunds plus one retry of the failed one
+    assert len({kw["payment_intent"] for kw in calls}) == 4
+    session.expire_all()
+    assert sorted(m.refunded_cents for m in session.exec(select(PoolMember)).all()) == [0, 5_000, 5_000, 5_000, 5_000]
+    rows = session.exec(select(Payment).where(Payment.kind == "refund")).all()
+    assert sorted(p.status for p in rows) == ["failed"] + ["succeeded"] * 4
+    assert len(session.exec(select(Notification).where(Notification.kind == "tier_refund")).all()) == 4
+
+
+def test_a_refund_of_a_charge_made_in_mock_mode_does_not_call_stripe(session, fake_stripe, table_pool):
+    sim = session.exec(select(User).where(User.name == "Sim 0")).one()
+    member = PoolMember(pool_id=table_pool.id, user_id=sim.id, joined_at=T0, status="charged",
+                        charged_cents=90_000)
+    session.add(member)
+    session.commit()
+    session.add(Payment(pool_member_id=member.id, kind="charge", amount_cents=90_000, status="succeeded",
+                        provider_ref=f"mock_ch_{member.id}_90000", created_at=T0))
+    session.commit()
+
+    assert payments.refund(session, member, 5_000) is True
+
+    assert fake_stripe.named("Refund.create") == []
+    row = session.exec(select(Payment).where(Payment.kind == "refund")).one()
+    assert row.status == "succeeded" and row.provider_ref.startswith("mock_re_")
+    assert member.refunded_cents == 5_000
+
+
+def test_a_real_shopper_whose_card_was_saved_in_mock_mode_must_save_it_again_to_join(
+        client, session, fake_stripe, table_pool):
+    bob = make_user(session, name="Bob", card_label="Visa •••• 4242")  # no Stripe payment method
+
+    r = client.post(f"/api/pools/{table_pool.id}/join", headers=as_user(bob))
+
+    assert_error(r, 402, "card_required")
+    assert session.exec(select(PoolMember)).all() == []
+
+
+def test_a_stripe_outage_at_lock_keeps_members_pending_and_charges_them_on_the_next_evaluation(
+        client, session, fake_stripe, table_pool):
+    pid = table_pool.id
+    fake_stripe.outage = True
+
+    client.post(f"/api/demo/pools/{pid}/simulate-joins", json={"count": 3})
+
+    assert client.get(f"/api/pools/{pid}").json()["status"] == "locked"
+    assert member_statuses(session) == ["pending"] * 3
+    charges = session.exec(select(Payment).where(Payment.kind == "charge")).all()
+    assert charges and all(p.status == "failed" for p in charges)
+    assert session.exec(select(Notification).where(Notification.kind == "payment_failed")).all() == []
+
+    # The deadline passes during the outage: Settlement waits for the unresolved charges.
+    client.post("/api/demo/clock/advance", json={"to_deadline_of_pool": pid})
+    assert client.get(f"/api/pools/{pid}").json()["status"] == "locked"
+
+    fake_stripe.outage = False
+    assert client.get(f"/api/pools/{pid}").json()["status"] == "completed"
+    assert member_statuses(session) == ["charged"] * 3
+    assert len(session.exec(select(Payment).where(Payment.kind == "charge",
+                                                  Payment.status == "succeeded")).all()) == 3
+
+
+def test_a_stripe_outage_on_a_late_join_keeps_the_member_pending_instead_of_declining(
+        client, session, fake_stripe, table_pool):
+    pid = table_pool.id
+    client.post(f"/api/demo/pools/{pid}/simulate-joins", json={"count": 3})
+    fake_stripe.outage = True
+    bob = make_user(session, name="Bob", card_label="Visa •••• 4242", stripe_customer_id="cus_bob",
+                    stripe_payment_method_id="pm_bob")
+
+    r = client.post(f"/api/pools/{pid}/join", headers=as_user(bob))
+
+    assert r.status_code == 200, r.text
+    assert r.json()["my_membership"]["status"] == "pending"

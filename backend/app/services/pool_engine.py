@@ -49,12 +49,55 @@ def current_price(product: Product, tiers: list[Tier], count: int) -> int:
     return tier_price(product, tier)
 
 
-def charge_member(session: Session, member: PoolMember, user: User, price: int) -> bool:
-    """Charge one Member at `price` and set them `charged` or `payment_failed`. Does not commit."""
-    ok = payments.charge(session, member, user, price)
-    member.status = "charged" if ok else "payment_failed"
-    session.add(member)
-    return ok
+def charge_member(session: Session, member: PoolMember, user: User, price: int) -> str:
+    """Charge one Member at `price`: `charged` on success, `payment_failed` on a decline, still `pending` when
+    the provider is unavailable (retried on the next evaluation). Returns the charge outcome; does not commit."""
+    outcome = payments.charge(session, member, user, price)
+    if outcome != payments.UNAVAILABLE:
+        member.status = "charged" if outcome == payments.SUCCEEDED else "payment_failed"
+        session.add(member)
+    return outcome
+
+
+def _charge_pending(session: Session, pool: Pool, product: Product, price: int, link: str) -> None:
+    """Charge every pending Member at `price` and notify the ones whose charge was decided. Commits after each
+    charge so a later failure can't lose a charge the provider already made."""
+    for m in get_members(session, pool, ("pending",)):
+        outcome = charge_member(session, m, session.get(User, m.user_id), price)
+        if outcome == payments.SUCCEEDED:
+            notify(session, m.user_id, "pool_locked", f"{product.name} pool locked",
+                   f"You were charged ${price / 100:,.2f}.", link)
+        elif outcome == payments.DECLINED:
+            notify(session, m.user_id, "payment_failed", f"Payment failed for {product.name}",
+                   "Your card was declined, so you were dropped from the pool.", link)
+        session.commit()
+
+
+def _settle(session: Session, pool: Pool, product: Product, tiers: list[Tier], now: datetime, link: str) -> None:
+    """Issue every Tier Refund still owed, then complete the Pool. If a refund fails, the Pool stays locked and
+    the next evaluation retries only what is still owed (charged - final - already refunded)."""
+    charged = get_members(session, pool, ("charged",))
+    final = tier_price(product, current_tier(tiers, len(charged)) or tiers[0])
+    all_refunded = True
+    for m in charged:
+        owed = m.charged_cents - final - m.refunded_cents
+        if owed > 0:
+            all_refunded &= payments.refund(session, m, owed)
+            session.commit()
+    if not all_refunded:
+        return
+    for m in charged:
+        if m.refunded_cents > 0:
+            notify(session, m.user_id, "tier_refund", f"Tier refund for {product.name}",
+                   f"${m.refunded_cents / 100:,.2f} refunded; everyone paid ${final / 100:,.2f}.", link)
+        else:
+            notify(session, m.user_id, "pool_completed", f"{product.name} pool completed",
+                   f"Final price ${final / 100:,.2f}.", link)
+    pool.status = "completed"
+    pool.closed_at = now
+    pool.final_price_cents = final
+    notify_retailer(session, product.retailer_id, "pool_completed", f"{product.name} pool completed",
+                    f"Final price ${final / 100:,.2f} for {len(charged)} members.", f"/retailer/pools/{pool.id}")
 
 
 def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> Pool:
@@ -69,16 +112,10 @@ def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> 
         if count >= tiers[0].min_participants:
             pool.status = "locked"
             pool.locked_at = now
-            price = tier_price(product, current_tier(tiers, count))
-            for m in get_members(session, pool, ("pending",)):
-                if charge_member(session, m, session.get(User, m.user_id), price):
-                    notify(session, m.user_id, "pool_locked", f"{product.name} pool locked",
-                           f"You were charged ${price / 100:,.2f}.", link)
-                else:
-                    notify(session, m.user_id, "payment_failed", f"Payment failed for {product.name}",
-                           "Your card was declined, so you were dropped from the pool.", link)
+            session.add(pool)
             notify_retailer(session, product.retailer_id, "pool_locked", f"{product.name} pool locked",
                             f"{count} members reached Tier 1.", f"/retailer/pools/{pool.id}")
+            _charge_pending(session, pool, product, tier_price(product, current_tier(tiers, count)), link)
         elif now >= pool.deadline:
             pool.status = "failed"
             pool.closed_at = now
@@ -86,26 +123,15 @@ def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> 
                 notify(session, m.user_id, "pool_failed", f"{product.name} pool didn't reach Tier 1",
                        "You were not charged.", link)
 
+    elif pool.status == "locked":
+        # Late joiners, and Members whose charge hit a provider outage, pay the current Tier price.
+        _charge_pending(session, pool, product, current_price(product, tiers, active_count(session, pool)), link)
+
     if pool.status == "locked":
         count = active_count(session, pool)
-        if now >= pool.deadline or (pool.stock_cap and count >= pool.stock_cap):
-            charged = get_members(session, pool, ("charged",))
-            final = tier_price(product, current_tier(tiers, len(charged)) or tiers[0])
-            for m in charged:
-                diff = m.charged_cents - final
-                if diff > 0:
-                    payments.refund(session, m, diff)
-                    notify(session, m.user_id, "tier_refund", f"Tier refund for {product.name}",
-                           f"${diff / 100:,.2f} refunded; everyone paid ${final / 100:,.2f}.", link)
-                else:
-                    notify(session, m.user_id, "pool_completed", f"{product.name} pool completed",
-                           f"Final price ${final / 100:,.2f}.", link)
-            pool.status = "completed"
-            pool.closed_at = now
-            pool.final_price_cents = final
-            notify_retailer(session, product.retailer_id, "pool_completed", f"{product.name} pool completed",
-                            f"Final price ${final / 100:,.2f} for {len(charged)} members.",
-                            f"/retailer/pools/{pool.id}")
+        unresolved = get_members(session, pool, ("pending",))
+        if not unresolved and (now >= pool.deadline or (pool.stock_cap and count >= pool.stock_cap)):
+            _settle(session, pool, product, tiers, now, link)
 
     session.add(pool)
     session.commit()

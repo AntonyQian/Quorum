@@ -6,6 +6,7 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.deps import get_pool_or_404
+from app.errors import api_error
 from app.models import Pool
 from app.schemas import PoolDetail
 from app.services import clock, membership, pool_engine, views
@@ -31,6 +32,8 @@ def get_clock(session: Session = Depends(get_session)):
 
 @router.post("/clock/advance")
 def advance_clock(body: AdvanceBody, session: Session = Depends(get_session)):
+    if (body.hours or 0) < 0 or (body.days or 0) < 0:
+        raise api_error(400, "invalid_request", "The Sim Clock only moves forward: hours and days can't be negative")
     if body.to_deadline_of_pool is not None:
         pool = get_pool_or_404(body.to_deadline_of_pool, session)
         clock.set_now(session, max(clock.now(session), pool.deadline))

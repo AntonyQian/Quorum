@@ -13,10 +13,10 @@ from sqlmodel import Session, select
 
 from app.db import drop_db, engine, init_db
 from app.models import DemandHit, Pool, PoolMember, Product, Retailer, Tier, User, Wish
-from app.services import clock, pool_engine
+from app.services import clock, payments, pool_engine
 
 SEED_FILE = Path(__file__).with_name("seed.json")
-CARD = "Visa •••• 4242"
+CARD = payments.WORKING_CARD_LABEL
 
 
 def seed(session: Session) -> None:
