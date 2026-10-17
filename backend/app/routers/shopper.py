@@ -5,9 +5,10 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.deps import current_user, get_pool_or_404, optional_user
-from app.models import Pool, Product, User
-from app.schemas import PoolDetail, PoolSummary, UserOut
-from app.services import membership, pool_engine, views
+from app.errors import not_found
+from app.models import Notification, Pool, PoolMember, Product, User
+from app.schemas import NotificationList, Order, PoolDetail, PoolSummary, UserOut
+from app.services import membership, notifications, pool_engine, views
 
 router = APIRouter()
 
@@ -52,3 +53,25 @@ def join_pool(user: User = Depends(current_user), pool: Pool = Depends(get_pool_
 def leave_pool(user: User = Depends(current_user), pool: Pool = Depends(get_pool_or_404),
                session: Session = Depends(get_session)):
     return views.pool_detail(session, membership.leave(session, pool, user), user)
+
+
+@router.get("/me/orders", response_model=list[Order])
+def my_orders(user: User = Depends(current_user), session: Session = Depends(get_session)):
+    members = session.exec(select(PoolMember).where(PoolMember.user_id == user.id).order_by(PoolMember.id.desc())).all()
+    return [views.order(session, m) for m in members]
+
+
+@router.get("/me/notifications", response_model=NotificationList)
+def my_notifications(user: User = Depends(current_user), session: Session = Depends(get_session)):
+    return notifications.list_for(session, user.id)
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_read(notification_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    n = session.get(Notification, notification_id)
+    if n is None or n.user_id != user.id:
+        raise not_found("Notification")
+    n.read = True
+    session.add(n)
+    session.commit()
+    return {"ok": True}

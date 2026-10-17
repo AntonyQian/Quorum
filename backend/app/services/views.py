@@ -2,9 +2,11 @@
 
 from sqlmodel import Session, select
 
-from app.models import Pool, PoolMember, Product, Retailer, User
+from app.models import Payment, Pool, PoolMember, Product, Retailer, User
 from app.schemas import (
     MyMembership,
+    Order,
+    PaymentLine,
     NextTier,
     PoolDetail,
     PoolSummary,
@@ -101,4 +103,25 @@ def pool_detail(session: Session, pool: Pool, viewer: User | None) -> PoolDetail
         my_membership=membership,
         final_price_cents=pool.final_price_cents,
         **_summary_fields(session, pool),
+    )
+
+
+def order(session: Session, member: PoolMember) -> Order:
+    pool = session.get(Pool, member.pool_id)
+    product = session.get(Product, pool.product_id)
+    pays = session.exec(
+        select(Payment).where(Payment.pool_member_id == member.id).order_by(Payment.created_at, Payment.id)
+    ).all()
+    return Order(
+        pool_id=pool.id,
+        product=product_card(session, product),
+        pool_status=pool.status,
+        member_status=member.status,
+        charged_cents=member.charged_cents,
+        refunded_cents=member.refunded_cents,
+        net_paid_cents=member.charged_cents - member.refunded_cents,
+        payments=[
+            PaymentLine(kind=p.kind, amount_cents=p.amount_cents, status=p.status, created_at=clock.iso(p.created_at))
+            for p in pays
+        ],
     )

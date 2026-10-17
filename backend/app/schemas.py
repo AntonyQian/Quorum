@@ -77,3 +77,36 @@ class SetupSessionBody(BaseModel):
 
 class ConfirmSetupBody(BaseModel):
     session_id: str
+
+
+class PaymentLine(BaseModel):
+    kind: Literal["charge", "refund"]
+    amount_cents: int
+    status: Literal["succeeded", "failed"]
+    created_at: str
+
+
+class Order(BaseModel):
+    pool_id: int
+    product: ProductCard
+    pool_status: PoolStatus
+    member_status: MemberStatus
+    charged_cents: int
+    refunded_cents: int
+    net_paid_cents: int
+    payments: list[PaymentLine]
+
+
+class NotificationOut(BaseModel):
+    id: int
+    kind: str
+    title: str
+    body: str
+    link: str | None
+    read: bool
+    created_at: str
+
+
+class NotificationList(BaseModel):
+    unread: int
+    items: list[NotificationOut]
