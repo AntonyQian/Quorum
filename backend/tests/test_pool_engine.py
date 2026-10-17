@@ -72,6 +72,16 @@ def test_open_to_locked_charges_everyone_at_tier_one_price(session):
     assert len(session.exec(select(Payment).where(Payment.kind == "charge")).all()) == 3
 
 
+def test_lock_charges_the_highest_reached_tier_when_members_skip_past_tier_one(session):
+    pool = make_pool(session)
+    members = [join(session, pool, n) for n in "abcde"]  # 5 pending: Tier 2 already reached
+    pool_engine.evaluate_pool(session, pool)
+    assert pool.status == "locked"
+    for m in members:
+        session.refresh(m)
+        assert (m.status, m.charged_cents) == ("charged", 85_000)
+
+
 def test_locked_to_completed_issues_tier_refunds(session):
     pool = make_pool(session)
     members = [join(session, pool, n) for n in "abc"]

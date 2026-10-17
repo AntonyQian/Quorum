@@ -4,6 +4,7 @@ Errors are raised in the SPEC §3 shape: 402 for `card_required`, 409 for every 
 Pool's or Member's current state.
 """
 
+from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from app.errors import api_error
@@ -66,3 +67,43 @@ def leave(session: Session, pool: Pool, user: User) -> Pool:
     session.add(member)
     session.commit()
     return pool_engine.evaluate_pool(session, pool)
+
+
+def simulate_joins(session: Session, pool: Pool, count: int, include_declining_card: bool = False) -> Pool:
+    """Demo panel: Join `count` Simulated Shoppers with working cards, plus one with a declining card if asked.
+
+    The declining Simulated Shopper joins first, so on an open Pool it is part of the Lock batch and ends
+    `payment_failed` there; on a locked Pool its immediate charge is declined. Simulated Shoppers are
+    created when the seeded ones run out. Joining stops early once the Pool can't take more Members.
+    """
+    joiners = []
+    if include_declining_card:
+        joiners += _simulated_shoppers(session, pool, 1, declining=True)
+    joiners += _simulated_shoppers(session, pool, count, declining=False)
+    for user in joiners:
+        try:
+            pool = join(session, pool, user)
+        except HTTPException as exc:
+            if exc.status_code != 402:  # a declined card only drops that Member; anything else is final
+                break
+    return pool_engine.evaluate_pool(session, pool)
+
+
+def _simulated_shoppers(session: Session, pool: Pool, count: int, *, declining: bool) -> list[User]:
+    """`count` card-saved Simulated Shoppers who aren't active Members of `pool`, creating any that are missing."""
+    active = select(PoolMember.user_id).where(PoolMember.pool_id == pool.id,
+                                              PoolMember.status.in_(pool_engine.ACTIVE))
+    users = list(session.exec(
+        select(User)
+        .where(User.is_simulated == True, User.card_label != None,  # noqa: E711,E712
+               User.card_declines == declining, User.id.not_in(active))
+        .order_by(User.id)
+        .limit(count)
+    ).all())
+    while len(users) < count:
+        user = User(name=f"Simulated Shopper {len(users) + 1}", role="shopper", is_simulated=True,
+                    card_label="Visa •••• 0341" if declining else "Visa •••• 4242", card_declines=declining)
+        session.add(user)
+        session.commit()
+        users.append(user)
+    return users
