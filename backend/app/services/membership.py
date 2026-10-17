@@ -8,10 +8,19 @@ from fastapi import HTTPException
 from sqlmodel import Session, select
 
 from app.errors import api_error
-from app.models import Pool, PoolMember, Product, User
-from app.services import clock, pool_engine
+from app.models import Pool, PoolMember, User
+from app.services import clock, payments, pool_engine
 
 JOINABLE = ("open", "locked")
+SIMULATED_NAME = "Simulated Shopper"
+
+
+class CardDeclined(HTTPException):
+    """Join on a locked Pool whose immediate charge was declined. The Member is left `payment_failed`."""
+
+    def __init__(self):
+        super().__init__(402, {"code": "card_required",
+                               "message": "Your card was declined. Save a different card and join again"})
 
 
 def _find_member(session: Session, pool: Pool, user: User) -> PoolMember | None:
@@ -30,7 +39,7 @@ def join(session: Session, pool: Pool, user: User) -> Pool:
         raise api_error(409, "already_member", "You're already in this Pool")
     if pool.stock_cap and pool_engine.active_count(session, pool) >= pool.stock_cap:
         raise api_error(409, "stock_cap_reached", "This Pool has reached its stock cap")
-    if not user.card_label:
+    if not payments.has_usable_card(user):
         raise api_error(402, "card_required", "Save a card before joining a Pool")
 
     if member is None:
@@ -39,20 +48,12 @@ def join(session: Session, pool: Pool, user: User) -> Pool:
     member.joined_at = clock.now(session)
     session.add(member)
     session.commit()
-    if pool.status == "locked" and not _charge_late_joiner(session, pool, member, user):
-        pool_engine.evaluate_pool(session, pool)
-        raise api_error(402, "card_required", "Your card was declined. Save a different card and join again")
-    return pool_engine.evaluate_pool(session, pool)
-
-
-def _charge_late_joiner(session: Session, pool: Pool, member: PoolMember, user: User) -> bool:
-    """Join on a locked Pool: charge now at the current Tier price, counting the new Member (SPEC §4)."""
-    product = session.get(Product, pool.product_id)
-    tiers = pool_engine.get_tiers(session, pool)
-    price = pool_engine.current_price(product, tiers, pool_engine.active_count(session, pool))
-    ok = pool_engine.charge_member(session, member, user, price)
-    session.commit()
-    return ok
+    # On a locked Pool, evaluate_pool charges the new pending Member now at the current Tier price (SPEC §4).
+    pool = pool_engine.evaluate_pool(session, pool)
+    session.refresh(member)
+    if member.status == "payment_failed":
+        raise CardDeclined()
+    return pool
 
 
 def leave(session: Session, pool: Pool, user: User) -> Pool:
@@ -83,9 +84,10 @@ def simulate_joins(session: Session, pool: Pool, count: int, include_declining_c
     for user in joiners:
         try:
             pool = join(session, pool, user)
-        except HTTPException as exc:
-            if exc.status_code != 402:  # a declined card only drops that Member; anything else is final
-                break
+        except CardDeclined:
+            continue  # a declined card only drops that Member
+        except HTTPException:
+            break  # the Pool can't take more Members
     return pool_engine.evaluate_pool(session, pool)
 
 
@@ -100,10 +102,20 @@ def _simulated_shoppers(session: Session, pool: Pool, count: int, *, declining: 
         .order_by(User.id)
         .limit(count)
     ).all())
+    number = _last_simulated_number(session)
     while len(users) < count:
-        user = User(name=f"Simulated Shopper {len(users) + 1}", role="shopper", is_simulated=True,
-                    card_label="Visa •••• 0341" if declining else "Visa •••• 4242", card_declines=declining)
+        number += 1
+        user = User(name=f"{SIMULATED_NAME} {number}", role="shopper", is_simulated=True,
+                    card_label=payments.DECLINING_CARD_LABEL if declining else payments.WORKING_CARD_LABEL,
+                    card_declines=declining)
         session.add(user)
         session.commit()
         users.append(user)
     return users
+
+
+def _last_simulated_number(session: Session) -> int:
+    """The highest N among users named `Simulated Shopper N`, so new ones get free names."""
+    names = session.exec(select(User.name).where(User.name.startswith(f"{SIMULATED_NAME} "))).all()
+    numbers = [int(n.rsplit(" ", 1)[1]) for n in names if n.rsplit(" ", 1)[1].isdigit()]
+    return max(numbers, default=0)

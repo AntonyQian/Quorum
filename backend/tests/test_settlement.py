@@ -83,6 +83,12 @@ def test_jumping_to_an_unknown_pools_deadline_is_not_found(client, world):
     assert client.get("/api/demo/clock").json() == {"now": "2026-10-17T12:00:00Z"}
 
 
+@pytest.mark.parametrize("body", [{"hours": -1}, {"days": -0.5}, {"hours": 5, "days": -1}])
+def test_the_sim_clock_never_goes_backwards(client, world, body):
+    assert_error(advance(client, **body), 400, "invalid_request")
+    assert client.get("/api/demo/clock").json() == {"now": "2026-10-17T12:00:00Z"}
+
+
 def test_advancing_before_the_deadline_settles_nothing(client, session, world):
     simulate(client, world["pool"].id, 3)
     advance(client, days=13)

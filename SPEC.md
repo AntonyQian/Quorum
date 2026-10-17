@@ -56,7 +56,7 @@ Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member
 
 - A missing, malformed, or unknown `X-User-Id` on an endpoint that needs a user returns 401 `forbidden`. Endpoints that work anonymously (`GET /pools`, `GET /pools/{id}`) treat it as no user.
 - A malformed path, query, or body returns 422 `invalid_request`, and an unknown route returns 404 `not_found`, in the same error body.
-- Join and Leave: `card_required` is 402 (also returned when Joining a locked Pool and the card is declined; the Member becomes `payment_failed` and may Join again with another card). `pool_not_joinable`, `already_member`, `stock_cap_reached`, `not_member`, and `cannot_leave_locked` are 409. An unknown Pool is 404 `not_found`. Join checks the Pool before the card, so a user with no saved card gets `pool_not_joinable`, `already_member` or `stock_cap_reached` when one applies, and `card_required` only otherwise. `stock_cap_reached` applies when the stock cap is full but the Pool hasn't settled yet; a locked Pool whose cap is full is completed by `evaluate_pool`, so Joining it is `pool_not_joinable`.
+- Join and Leave: `card_required` is 402 (also returned when Joining a locked Pool and the card is declined, in which case the Member becomes `payment_failed` and may Join again with another card; and in Stripe mode for a real shopper whose card was saved in mock mode). `pool_not_joinable`, `already_member`, `stock_cap_reached`, `not_member`, and `cannot_leave_locked` are 409. An unknown Pool is 404 `not_found`. Join checks the Pool before the card, so a user with no saved card gets `pool_not_joinable`, `already_member` or `stock_cap_reached` when one applies, and `card_required` only otherwise. `stock_cap_reached` applies when the stock cap is full but the Pool hasn't settled yet; a locked Pool whose cap is full is completed by `evaluate_pool`, so Joining it is `pool_not_joinable`.
 
 ---
 
@@ -81,7 +81,7 @@ open ──(members ≥ tier1)──▶ locked ──(deadline OR stock cap)─�
 
 ### Member statuses
 
-`pending` (card saved, not charged), `charged`, `left`, `payment_failed`.
+`pending` (card saved, not charged yet; also a Member whose charge hit a payment-provider outage and will be retried), `charged`, `left`, `payment_failed` (card declined).
 **Active members** are those that are `pending` or `charged`. The participant count shown everywhere is the number of active members.
 
 ### Pricing
@@ -95,29 +95,35 @@ open ──(members ≥ tier1)──▶ locked ──(deadline OR stock cap)─�
 ### `evaluate_pool(pool, now)`: the only place where Pool state changes
 
 ```
+charge_pending(price):
+    for m in pending members:
+        outcome = payments.charge(session, m, m.user, price)
+        succeeded   -> m.status = "charged"          # notify "Pool locked, you were charged"
+        declined    -> m.status = "payment_failed"   # notify "Payment failed"
+        unavailable -> m stays "pending"             # provider outage; retried on the next evaluation
+
 if pool.status == "open":
     if active_count >= tiers[0].min_participants:
-        pool.status = "locked"; pool.locked_at = now
-        price = tier_price(current_tier)
-        for m in pending members:
-            ok = payments.charge(m.user, price)
-            m.status = "charged" if ok else "payment_failed"   # notify either way
-        notify retailer "Pool locked"
+        pool.status = "locked"; pool.locked_at = now; notify retailer "Pool locked"
+        charge_pending(tier_price(current_tier))
     elif now >= pool.deadline:
         pool.status = "failed"; notify all members "Pool didn't reach Tier 1, you were not charged"
+elif pool.status == "locked":
+    charge_pending(current_price)                    # late joiners, and Members left pending by an outage
 
-if pool.status == "locked":
+if pool.status == "locked" and no pending members:
     if now >= pool.deadline or (pool.stock_cap and active_count >= pool.stock_cap):
         final = tier_price(current_tier)            # tier from charged count
         for m in charged members:
-            diff = m.charged_cents - final
-            if diff > 0: payments.refund(m, diff)   # Tier Refund
-        pool.status = "completed"; pool.final_price_cents = final
-        notify members + retailer
+            owed = m.charged_cents - final - m.refunded_cents
+            if owed > 0: payments.refund(session, m, owed)   # Tier Refund
+        if any refund failed: stay locked            # the next evaluation retries only what is still owed
+        else: pool.status = "completed"; pool.final_price_cents = final; notify members + retailer
 ```
 
 - A locked Pool whose stock cap is full completes on its next `evaluate_pool`, so a Join on it gets `pool_not_joinable`; `stock_cap_reached` applies only while the cap is full and the Pool hasn't settled yet.
-- Join on a `locked` Pool runs `payments.charge` immediately at the current Tier price (after counting the new member), then calls `evaluate_pool`.
+- Join on a `locked` Pool adds a `pending` Member and calls `evaluate_pool`, which charges them immediately at the current Tier price (after counting the new member). If the payment provider is unavailable, the Join still succeeds and the Member stays `pending` until a later evaluation charges them.
+- Settlement waits while any Member is `pending` or any Tier Refund has failed, so a Pool can stay `locked` past its deadline during a payment-provider outage. Each charge and refund is committed as soon as it is made, and a refund is never issued twice.
 - A card declined at Lock drops only that Member. The Pool still Locks even if the active count falls below Tier 1 as a result.
 - Call `evaluate_pool` after every Join or Leave, whenever a Pool is read, and on every open or locked Pool after the clock is advanced.
 
@@ -128,17 +134,22 @@ if pool.status == "locked":
 Everything goes through one adapter, `services/payments.py`, with two implementations chosen by `MOCK_PAYMENTS`:
 
 ```
-create_setup_session(user) -> url
-confirm_setup(user, session_id) -> card_label        # "Visa •••• 4242"
-charge(user, amount_cents) -> (ok: bool, payment_ref: str)
-refund(payment_ref, amount_cents) -> refund_ref
+create_setup_session(session, user, return_to=None) -> url
+confirm_setup(session, user, session_id) -> card_label   # "Visa •••• 4242"
+has_usable_card(user) -> bool                            # Join checks this for card_required
+charge(session, member, user, amount_cents) -> "succeeded" | "declined" | "unavailable"
+refund(session, member, amount_cents) -> bool            # from the member's latest charge that covers it
 ```
+
+`charge` and `refund` write every attempt to `payments` (status `succeeded` or `failed`, the provider's id in `provider_ref`) and update `member.charged_cents` / `member.refunded_cents` only on success. Neither commits; `evaluate_pool` does.
 
 **Stripe mode** (test keys):
 - Saving a card uses Stripe Checkout with `mode="setup"` and a Stripe Customer per user. `success_url = {FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`. The frontend then calls `confirm-setup`, and the backend reads the session's SetupIntent to get the payment method and stores it on the user. No webhooks.
 - Charging uses a PaymentIntent with `off_session=True, confirm=True` on the saved payment method.
-- Refunds use a Refund on the PaymentIntent with a partial `amount`.
-- Simulated Shoppers get a test customer with `pm_card_visa` attached. One "declining" simulated shopper uses `pm_card_chargeCustomerFail`, which saves fine but fails when charged.
+- Only a Stripe card error is a decline (`declined`: the Member becomes `payment_failed`). Any other Stripe error (network, rate limit, bad key) is `unavailable`: the attempt is recorded as a failed charge and the Member stays `pending`.
+- Refunds use a Refund on the PaymentIntent with a partial `amount`. A Stripe error records a failed refund and returns false.
+- Simulated Shoppers get a test customer with `pm_card_visa` attached, created on their first charge (so the first Lock in Stripe mode makes a few extra Stripe calls). One "declining" simulated shopper uses `pm_card_chargeCustomerFail`, which saves fine but fails when charged.
+- Switching an existing database from mock to Stripe mode: refunding a charge made in mock mode (`provider_ref` starting `mock_`) is recorded as a mock refund without calling Stripe. A real shopper whose card was saved in mock mode has no Stripe payment method, so Join returns 402 `card_required` until they save a card again.
 
 **Mock mode:** `create_setup_session` returns `{FRONTEND_URL}/payment/success?session_id=mock_<userId>`. `confirm_setup` stores `"Visa •••• 4242"` and clears `user.card_declines`, so a `payment_failed` Member can save a new card and Join again. `charge` succeeds unless `user.card_declines` is true. Refunds always succeed. Every charge and refund is still written to the `payments` table, so the UI looks the same in both modes.
 
@@ -279,7 +290,7 @@ type Order = {
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/payments/setup-session` | `{ return_to?: string }` | `{ url }`. The frontend sends the browser there |
-| POST | `/payments/confirm-setup` | `{ session_id }` | `{ card_label }` |
+| POST | `/payments/confirm-setup` | `{ session_id }` | `{ card_label }`. 400 `invalid_request` (Stripe mode) when the session is unknown, belongs to another user, or card saving wasn't finished |
 
 ### Retailer (role must be `retailer`; scoped to the user's `retailer_id`)
 
@@ -323,8 +334,8 @@ type RetailerProduct = ProductCard & {
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/demo/clock` | none | `{ now }` |
-| POST | `/demo/clock/advance` | `{ hours?: number, days?: number, to_deadline_of_pool?: number }` | `{ now }`, and it evaluates all open and locked Pools |
-| POST | `/demo/pools/{id}/simulate-joins` | `{ count: number, include_declining_card?: boolean }` | `PoolDetail` |
+| POST | `/demo/clock/advance` | `{ hours?: number, days?: number, to_deadline_of_pool?: number }` | `{ now }`, and it evaluates all open and locked Pools. The clock never goes back: negative `hours` or `days` is 400 `invalid_request`, and a deadline already passed leaves it where it is. Unknown `to_deadline_of_pool` is 404 `not_found` |
+| POST | `/demo/pools/{id}/simulate-joins` | `{ count: number, include_declining_card?: boolean }` | `PoolDetail`. `count` is 0–200 (otherwise 422 `invalid_request`); unknown Pool is 404 `not_found` |
 | POST | `/demo/products/{id}/simulate-demand` | `{ count: number }` | `{ total_hits }` (fake Wishes from simulated shoppers, no Claude call) |
 | POST | `/demo/reset` | none | `{ ok: true }` (drop and reseed) |
 

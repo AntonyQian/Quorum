@@ -104,6 +104,14 @@ def test_simulate_joins_creates_simulated_shoppers_when_the_seeded_ones_run_out(
     assert len(sims) == 7  # 4 + 1 declining + 2 new
 
 
+def test_new_simulated_shoppers_never_reuse_a_taken_name(client, session, world):
+    session.add(User(name="Simulated Shopper 5", role="shopper", is_simulated=True))  # no card, so never picked
+    session.commit()
+    simulate(client, world["pool"].id, count=6)
+    names = [u.name for u in session.exec(select(User)).all()]
+    assert len(names) == len(set(names))
+
+
 def test_simulate_joins_never_uses_real_shoppers(client, session, world):
     simulate(client, world["pool"].id, count=4)
     detail = client.get(f"/api/pools/{world['pool'].id}", headers=as_user(world["bob"])).json()
