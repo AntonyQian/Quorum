@@ -19,6 +19,7 @@ def create_setup_session(user: User, return_to: str | None = None) -> str:
 def confirm_setup(session: Session, user: User, session_id: str) -> str:
     if config.MOCK_PAYMENTS:
         user.card_label = "Visa •••• 4242"
+        user.card_declines = False  # a newly saved card replaces the declining one
         session.add(user)
         session.commit()
         return user.card_label

@@ -52,7 +52,11 @@ This file is the contract between the frontend (Cursor) and the backend (Claude 
 - **Errors:** a non-2xx response has the body `{"detail": {"code": "card_required", "message": "..."}}`. Error codes are listed below.
 - **Live updates:** the frontend polls (pool detail and notifications every 3 seconds). There are no websockets.
 
-Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`.
+Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`, `invalid_request`.
+
+- A missing, malformed, or unknown `X-User-Id` on an endpoint that needs a user returns 401 `forbidden`. Endpoints that work anonymously (`GET /pools`, `GET /pools/{id}`) treat it as no user.
+- A malformed path, query, or body returns 422 `invalid_request`, and an unknown route returns 404 `not_found`, in the same error body.
+- Join and Leave: `card_required` is 402 (also returned when Joining a locked Pool and the card is declined; the Member becomes `payment_failed` and may Join again with another card). `pool_not_joinable`, `already_member`, `stock_cap_reached`, `not_member`, and `cannot_leave_locked` are 409. An unknown Pool is 404 `not_found`. Join checks the Pool before the card, so a user with no saved card gets `pool_not_joinable`, `already_member` or `stock_cap_reached` when one applies, and `card_required` only otherwise. `stock_cap_reached` applies when the stock cap is full but the Pool hasn't settled yet; a locked Pool whose cap is full is completed by `evaluate_pool`, so Joining it is `pool_not_joinable`.
 
 ---
 
@@ -112,6 +116,7 @@ if pool.status == "locked":
         notify members + retailer
 ```
 
+- A locked Pool whose stock cap is full completes on its next `evaluate_pool`, so a Join on it gets `pool_not_joinable`; `stock_cap_reached` applies only while the cap is full and the Pool hasn't settled yet.
 - Join on a `locked` Pool runs `payments.charge` immediately at the current Tier price (after counting the new member), then calls `evaluate_pool`.
 - A card declined at Lock drops only that Member. The Pool still Locks even if the active count falls below Tier 1 as a result.
 - Call `evaluate_pool` after every Join or Leave, whenever a Pool is read, and on every open or locked Pool after the clock is advanced.
@@ -135,7 +140,7 @@ refund(payment_ref, amount_cents) -> refund_ref
 - Refunds use a Refund on the PaymentIntent with a partial `amount`.
 - Simulated Shoppers get a test customer with `pm_card_visa` attached. One "declining" simulated shopper uses `pm_card_chargeCustomerFail`, which saves fine but fails when charged.
 
-**Mock mode:** `create_setup_session` returns `{FRONTEND_URL}/payment/success?session_id=mock_<userId>`. `confirm_setup` stores `"Visa •••• 4242"`. `charge` succeeds unless `user.card_declines` is true. Refunds always succeed. Every charge and refund is still written to the `payments` table, so the UI looks the same in both modes.
+**Mock mode:** `create_setup_session` returns `{FRONTEND_URL}/payment/success?session_id=mock_<userId>`. `confirm_setup` stores `"Visa •••• 4242"` and clears `user.card_declines`, so a `payment_failed` Member can save a new card and Join again. `charge` succeeds unless `user.card_declines` is true. Refunds always succeed. Every charge and refund is still written to the `payments` table, so the UI looks the same in both modes.
 
 ---
 

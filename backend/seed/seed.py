@@ -8,6 +8,7 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from app.db import drop_db, engine, init_db
@@ -76,10 +77,11 @@ def seed(session: Session) -> None:
             session.commit()
 
 
-def reset_and_seed() -> None:
-    drop_db()
-    init_db()
-    with Session(engine) as session:
+def reset_and_seed(bind: Engine = engine) -> None:
+    """Drop, recreate, and reload every table, so re-running always yields the same starter data."""
+    drop_db(bind)
+    init_db(bind)
+    with Session(bind) as session:
         seed(session)
 
 

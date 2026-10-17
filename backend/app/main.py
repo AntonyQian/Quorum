@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import config
+from app import config, errors
 from app.db import init_db
 from app.routers import demo, payments, retailer, shopper
 
@@ -15,6 +15,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Quorum API", lifespan=lifespan)
+errors.install(app)
 
 app.add_middleware(
     CORSMiddleware,
