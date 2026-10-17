@@ -52,7 +52,10 @@ This file is the contract between the frontend (Cursor) and the backend (Claude 
 - **Errors:** a non-2xx response has the body `{"detail": {"code": "card_required", "message": "..."}}`. Error codes are listed below.
 - **Live updates:** the frontend polls (pool detail and notifications every 3 seconds). There are no websockets.
 
-Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`.
+Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`, `invalid_request`.
+
+- A missing, malformed, or unknown `X-User-Id` on an endpoint that needs a user returns 401 `forbidden`. Endpoints that work anonymously (`GET /pools`, `GET /pools/{id}`) treat it as no user.
+- A malformed path, query, or body returns 422 `invalid_request`, and an unknown route returns 404 `not_found`, in the same error body.
 
 ---
 

@@ -7,12 +7,13 @@ from app.models import User
 
 
 def optional_user(
-    x_user_id: int | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
     session: Session = Depends(get_session),
 ) -> User | None:
-    if x_user_id is None:
+    """The account named by X-User-Id, or None when the header is missing, malformed, or unknown."""
+    if x_user_id is None or not x_user_id.strip().isdigit():
         return None
-    return session.get(User, x_user_id)
+    return session.get(User, int(x_user_id))
 
 
 def current_user(user: User | None = Depends(optional_user)) -> User:
