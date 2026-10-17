@@ -1,4 +1,4 @@
-"""Accounts and shopper endpoints (SPEC §8). Join/leave, recommend, orders and notifications are still TODO."""
+"""Accounts and shopper endpoints (SPEC §8). Recommend, orders and notifications are still TODO."""
 
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
@@ -8,7 +8,7 @@ from app.deps import current_user, optional_user
 from app.errors import not_found
 from app.models import Pool, Product, User
 from app.schemas import PoolDetail, PoolSummary, UserOut
-from app.services import pool_engine, views
+from app.services import membership, pool_engine, views
 
 router = APIRouter()
 
@@ -43,3 +43,19 @@ def get_pool(pool_id: int, viewer: User | None = Depends(optional_user), session
         raise not_found("Pool")
     pool = pool_engine.evaluate_pool(session, pool)
     return views.pool_detail(session, pool, viewer)
+
+
+@router.post("/pools/{pool_id}/join", response_model=PoolDetail)
+def join_pool(pool_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    pool = session.get(Pool, pool_id)
+    if pool is None:
+        raise not_found("Pool")
+    return views.pool_detail(session, membership.join(session, pool, user), user)
+
+
+@router.post("/pools/{pool_id}/leave", response_model=PoolDetail)
+def leave_pool(pool_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    pool = session.get(Pool, pool_id)
+    if pool is None:
+        raise not_found("Pool")
+    return views.pool_detail(session, membership.leave(session, pool, user), user)

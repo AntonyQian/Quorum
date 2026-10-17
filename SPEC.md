@@ -56,6 +56,7 @@ Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member
 
 - A missing, malformed, or unknown `X-User-Id` on an endpoint that needs a user returns 401 `forbidden`. Endpoints that work anonymously (`GET /pools`, `GET /pools/{id}`) treat it as no user.
 - A malformed path, query, or body returns 422 `invalid_request`, and an unknown route returns 404 `not_found`, in the same error body.
+- Join and Leave: `card_required` is 402 (also returned when Joining a locked Pool and the card is declined; the Member becomes `payment_failed` and may Join again with another card). `pool_not_joinable`, `already_member`, `stock_cap_reached`, `not_member`, and `cannot_leave_locked` are 409. An unknown Pool is 404 `not_found`.
 
 ---
 
