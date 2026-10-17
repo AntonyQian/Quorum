@@ -1,0 +1,50 @@
+{
+  "retailers": [
+    {"name": "Oak & Co.", "tagline": "Solid wood, built to last"},
+    {"name": "Nordlund", "tagline": "Modern Scandinavian living"},
+    {"name": "ReLoft", "tagline": "Refurbished furniture, like new"}
+  ],
+  "shoppers": [
+    {"name": "Alice"},
+    {"name": "Bob"}
+  ],
+  "simulated_shopper_count": 40,
+  "declining_shopper_name": "Sim Dana",
+  "products": [
+    {
+      "retailer": "Oak & Co.", "name": "Solid Oak Bookshelf", "category": "bookshelf",
+      "description": "Five-shelf bookshelf in solid oak.", "style_tags": ["oak", "traditional"],
+      "dimensions": "180 x 90 x 30 cm", "list_price_cents": 89900, "floor_price_cents": 59900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156",
+      "pool": {"deadline_days": 14, "fill": 6, "tiers": [[8, 10000], [20, 20000]]}
+    },
+    {
+      "retailer": "Nordlund", "name": "Scandi Sofa", "category": "sofa",
+      "description": "Three-seat sofa in woven grey fabric.", "style_tags": ["scandinavian", "grey"],
+      "dimensions": "210 x 90 x 80 cm", "list_price_cents": 139900, "floor_price_cents": 99900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc",
+      "pool": {"deadline_days": 21, "fill": 12, "tiers": [[10, 15000], [25, 30000]]}
+    },
+    {
+      "retailer": "ReLoft", "name": "Refurbished Leather Armchair", "category": "chair",
+      "description": "Mid-century leather armchair, professionally restored.", "style_tags": ["leather", "mid-century"],
+      "dimensions": "75 x 80 x 85 cm", "list_price_cents": 59900, "floor_price_cents": 39900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c",
+      "pool": {"deadline_days": 2, "fill": 3, "tiers": [[5, 8000], [12, 15000]]}
+    },
+    {
+      "retailer": "Oak & Co.", "name": "Walnut Dining Table", "category": "dining_table",
+      "description": "Solid walnut dining table that seats four to six.", "style_tags": ["walnut", "mid-century"],
+      "dimensions": "150 x 85 x 75 cm", "list_price_cents": 89900, "floor_price_cents": 59900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200",
+      "hidden": {"demand_threshold": 10, "hits": 9}
+    },
+    {
+      "retailer": "Nordlund", "name": "Birch Writing Desk", "category": "desk",
+      "description": "Compact birch desk with a cable drawer.", "style_tags": ["birch", "minimal"],
+      "dimensions": "120 x 60 x 74 cm", "list_price_cents": 69900, "floor_price_cents": 49900,
+      "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd",
+      "hidden": {"demand_threshold": 8, "hits": 3}
+    }
+  ]
+}
