@@ -161,6 +161,7 @@ refund(session, member, amount_cents) -> bool            # from the member's lat
 
 `POST /api/recommend` makes **one** LLM call (`OPENAI_MODEL`, structured JSON output, minimal reasoning). The prompt includes:
 - the Wish text
+- the list of categories live Products use (the model must pick `parsed.category` from it)
 - a compact JSON list of **public Pools** (id, name, category, style tags, dimensions, current or next price, participants, deadline)
 - a compact JSON list of **Hidden Listings** (id, name, category, style tags, dimensions, floor price), which the shopper never sees
 
@@ -176,7 +177,7 @@ The required output schema:
 
 The backend then:
 1. Saves the Wish (`wishes` table) with `parsed`.
-2. Returns `pool_matches` with `fit_score >= 50`, sorted by score and capped at 6, joined with the Pool summaries.
+2. Picks the Pools to show **in code**, not from the model, so the same Wish always shows the same Pools. The shopper's own words win over the model's parse for category, and the model's category is used only when the Wish names none (and only if some Product has it). `recommendations` holds every live public Pool in that category (a plain "table" Wish parses to `any_table` and covers dining and coffee tables; "coffee table" and "dining table" stay specific) that has every material or color the shopper named and costs no more than `budget_max_cents`. It's ordered by how many named styles the Pool has, then by deadline, and capped at 24. `suggestions` holds the Pools that pass everything but the budget, cheapest first, capped at 3. Only a Wish with no category, budget or style words at all falls back to the model's `pool_matches` / `suggestions` (`fit_score >= 60`, live Pools only, capped at 6 and 3).
 3. For each hidden match with `fit_score >= 60` **and** (`budget_max_cents` is null **or** `>= floor_price_cents`), inserts a **Demand Hit** (unique per user and product).
 4. When a Product's hit count reaches or passes its `demand_threshold` (also when a PATCH lowers or sets the threshold at or below the current count), it notifies the retailer once per Product (`kind: "demand_threshold"`, `link: "/retailer?product={id}"`): "23 shoppers want something like *Walnut Dining Table*. Launch a pool?"
 

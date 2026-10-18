@@ -1,4 +1,4 @@
-"""Ticket #25: POST /api/recommend, one LLM call that parses a Wish and ranks live Pools (SPEC §6, §8).
+"""Ticket #25: POST /api/recommend. One LLM call parses the Wish; code picks which live Pools are shown (SPEC §6, §8).
 
 The LLM call is stubbed at `recommender.complete` (prompt in, structured output out), so no test touches
 the network.
@@ -79,7 +79,7 @@ def claude(monkeypatch):
     return stub
 
 
-def test_recommend_returns_wish_id_parsed_and_ranked_pool_summaries(client, world, claude):
+def test_recommend_returns_wish_id_parsed_and_pool_summaries(client, world, claude):
     claude.output = {
         "parsed": PARSED,
         "pool_matches": [
@@ -97,43 +97,48 @@ def test_recommend_returns_wish_id_parsed_and_ranked_pool_summaries(client, worl
     assert isinstance(body["wish_id"], int)
     assert body["parsed"] == PARSED
     assert [rec["pool"]["id"] for rec in body["recommendations"]] == [world["table"].id]
-    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["sofa"].id]
+    assert body["suggestions"] == []  # the model's sofa pick is not a dining table, so it is not shown
     first = body["recommendations"][0]
     assert set(first) == {"pool"}
     assert set(first["pool"]) == SUMMARY_KEYS
 
 
-def test_only_live_pools_scoring_60_or_more_are_returned_and_at_most_6(client, session, world, claude):
-    extra = []
-    for i in range(6):
-        prod = Product(retailer_id=1, name=f"Table {i}", category="dining_table", list_price_cents=80_000,
-                       floor_price_cents=50_000, visibility="public", created_at=T0)
-        session.add(prod)
-        session.commit()
-        pool = Pool(product_id=prod.id, opened_at=T0, deadline=T0 + timedelta(days=1))
-        session.add(pool)
-        session.commit()
-        session.add(Tier(pool_id=pool.id, ordinal=1, min_participants=3, discount_cents=10_000))
-        session.commit()
-        extra.append(pool.id)
+def test_a_table_wish_shows_every_live_table_pool_whatever_the_model_picks(client, session, world, claude):
+    retailer_id = session.get(Product, world["table"].product_id).retailer_id
+    extra = [_add_pool(session, retailer_id, f"Table {i}", "dining_table", []).id for i in range(6)]
     claude.output = {
-        "parsed": PARSED,
+        "parsed": {"category": None, "style_tags": []},
         "pool_matches": [
-            {"pool_id": world["sofa"].id, "fit_score": 49},
+            {"pool_id": world["sofa"].id, "fit_score": 99},
             {"pool_id": world["done"].id, "fit_score": 99},
             {"pool_id": 9999, "fit_score": 98},
-            {"pool_id": world["lamp"].id, "fit_score": 59},
-            *[{"pool_id": pid, "fit_score": 60 + n} for n, pid in enumerate(extra)],
+            {"pool_id": extra[0], "fit_score": 61},
         ],
         "hidden_matches": [],
     }
 
-    r = client.post("/api/recommend", json={"text": "a table"}, headers=as_user(world["alice"]))
+    r = client.post("/api/recommend", json={"text": "table"}, headers=as_user(world["alice"]))
 
     assert r.status_code == 200, r.text
-    recs = r.json()["recommendations"]
-    assert len(recs) == 6
-    assert world["lamp"].id not in [rec["pool"]["id"] for rec in recs]  # 7th best, cut by the cap
+    assert [rec["pool"]["id"] for rec in r.json()["recommendations"]] == [world["table"].id, *extra]  # by deadline
+    assert r.json()["suggestions"] == []
+
+
+def test_the_same_wish_shows_the_same_pools_however_the_model_answers(client, session, world, claude):
+    retailer_id = session.get(Product, world["table"].product_id).retailer_id
+    coffee = _add_pool(session, retailer_id, "Low Coffee Table", "table", ["oak"])
+    outputs = [
+        {"parsed": {"category": "dining_table"}, "pool_matches": [], "hidden_matches": []},
+        {"parsed": {"category": "sofa"}, "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 95}],
+         "hidden_matches": []},
+        {"parsed": {}, "pool_matches": [{"pool_id": coffee.id, "fit_score": 70}], "hidden_matches": []},
+    ]
+    results = []
+    for output in outputs:
+        claude.output = output
+        r = client.post("/api/recommend", json={"text": "table"}, headers=as_user(world["alice"]))
+        results.append([rec["pool"]["id"] for rec in r.json()["recommendations"]])
+    assert results == [[world["table"].id, coffee.id]] * 3
 
 
 def test_prompt_includes_the_wish_and_live_public_pools_only(client, world, claude):
@@ -158,14 +163,23 @@ def test_a_live_pool_on_a_hidden_product_is_never_a_public_candidate(client, ses
     session.commit()
     session.add(Tier(pool_id=pool.id, ordinal=1, min_participants=3, discount_cents=10_000))
     session.commit()
-    claude.output = {"parsed": PARSED, "pool_matches": [{"pool_id": pool.id, "fit_score": 99}],
-                     "hidden_matches": []}
+    claude.output = {"parsed": {}, "pool_matches": [{"pool_id": pool.id, "fit_score": 99}], "hidden_matches": []}
 
-    r = client.post("/api/recommend", json={"text": "a bench"}, headers=as_user(world["alice"]))
+    r = client.post("/api/recommend", json={"text": "something to sit on"}, headers=as_user(world["alice"]))
     assert r.status_code == 200, r.text
     assert r.json()["recommendations"] == []
     public_section = claude.prompts[0].split("<public_pools>")[1].split("</public_pools>")[0]
     assert "Hidden Bench" not in public_section
+
+
+def test_a_category_we_do_not_sell_shows_nothing_rather_than_everything(client, world, claude):
+    claude.output = {"parsed": PARSED, "pool_matches": [{"pool_id": world["table"].id, "fit_score": 90}],
+                     "hidden_matches": []}
+
+    r = client.post("/api/recommend", json={"text": "a bench"}, headers=as_user(world["alice"]))
+
+    assert r.json()["parsed"]["category"] == "seating"
+    assert r.json()["recommendations"] == r.json()["suggestions"] == []
 
 
 def test_the_wish_is_saved_with_its_parsed_fields(client, session, world, claude):
@@ -192,19 +206,49 @@ def test_table_under_50_over_budget_pool_is_only_a_suggestion(client, world, cla
     assert body["parsed"]["budget_max_cents"] == 5_000
     assert body["recommendations"] == []
     assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["table"].id]
-def test_over_budget_primary_matches_become_suggestions(client, world, claude):
-    claude.output = {
-        "parsed": {"category": "chair", "budget_max_cents": 20_000, "style_tags": [], "size_notes": None},
-        "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 99}],
-        "suggestions": [],
-        "hidden_matches": [],
-    }
+def test_over_budget_pools_in_the_category_are_suggestions_cheapest_first(client, session, world, claude):
+    retailer_id = session.get(Product, world["table"].product_id).retailer_id
+    cheaper = _add_pool(session, retailer_id, "Pine Table", "dining_table", ["pine"])
+    session.get(Product, cheaper.product_id).list_price_cents = 40_000
+    session.commit()
+    claude.output = {"parsed": {}, "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 99}],
+                     "hidden_matches": []}
 
-    r = client.post("/api/recommend", json={"text": "chair under 200"}, headers=as_user(world["alice"]))
+    r = client.post("/api/recommend", json={"text": "table under 200"}, headers=as_user(world["alice"]))
 
     body = r.json()
     assert body["recommendations"] == []
-    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["sofa"].id]
+    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [cheaper.id, world["table"].id]
+
+
+def test_a_vague_wish_falls_back_to_the_models_picks(client, world, claude):
+    claude.output = {"parsed": {}, "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 80},
+                                                     {"pool_id": world["done"].id, "fit_score": 95}],
+                     "suggestions": [{"pool_id": world["lamp"].id, "fit_score": 70}], "hidden_matches": []}
+
+    r = client.post("/api/recommend", json={"text": "something cozy for movie night"}, headers=as_user(world["alice"]))
+
+    assert [rec["pool"]["id"] for rec in r.json()["recommendations"]] == [world["sofa"].id]  # completed Pool dropped
+    assert [rec["pool"]["id"] for rec in r.json()["suggestions"]] == [world["lamp"].id]
+
+
+def test_a_vague_wish_the_model_maps_to_a_category_is_filtered_in_code(client, session, world, claude):
+    claude.output = {"parsed": {"category": "dining_table"}, "pool_matches": [], "hidden_matches": []}
+
+    r = client.post("/api/recommend", json={"text": "somewhere to eat with friends"}, headers=as_user(world["alice"]))
+
+    assert [rec["pool"]["id"] for rec in r.json()["recommendations"]] == [world["table"].id]
+
+
+def test_a_category_the_model_makes_up_is_ignored(client, world, claude):
+    claude.output = {"parsed": {"category": "hammock"}, "pool_matches": [{"pool_id": world["sofa"].id,
+                                                                            "fit_score": 80}],
+                     "hidden_matches": []}
+
+    r = client.post("/api/recommend", json={"text": "somewhere to relax"}, headers=as_user(world["alice"]))
+
+    assert r.json()["parsed"]["category"] is None
+    assert [rec["pool"]["id"] for rec in r.json()["recommendations"]] == [world["sofa"].id]
 
 
 def test_missing_parsed_fields_come_back_as_null(client, world, claude):
@@ -293,3 +337,72 @@ def test_complete_turns_every_model_failure_into_recommender_error(fake_sdk, res
     fake_sdk.result = result
     with pytest.raises(RecommenderError):
         recommender.complete("the prompt")
+
+
+def _add_pool(session, retailer_id, name, category, tags, description=""):
+    prod = Product(retailer_id=retailer_id, name=name, category=category, style_tags=tags, description=description,
+                   list_price_cents=80_000, floor_price_cents=50_000, visibility="public", created_at=T0)
+    session.add(prod)
+    session.commit()
+    pool = Pool(product_id=prod.id, status="open", opened_at=T0, deadline=T0 + timedelta(days=2))
+    session.add(pool)
+    session.commit()
+    session.add(Tier(pool_id=pool.id, ordinal=1, min_participants=3, discount_cents=10_000))
+    session.commit()
+    return pool
+
+
+def test_a_material_search_shows_only_pools_with_that_material_even_when_the_model_is_sloppy(
+        client, session, world, claude):
+    retailer_id = world["table"].product_id and session.get(Product, world["table"].product_id).retailer_id
+    oak = _add_pool(session, retailer_id, "Solid Oak Side Table", "table", ["oak"])
+    teak_desk = _add_pool(session, retailer_id, "Restored Teak Desk", "desk", ["teak"])
+    walnut_shelf = _add_pool(session, retailer_id, "Tall Bookcase", "bookshelf", ["mid-century"],
+                             description="Tall walnut bookcase.")
+    claude.output = {
+        "parsed": {"category": "null", "budget_max_cents": None, "style_tags": ["walnut"], "size_notes": None},
+        "pool_matches": [{"pool_id": oak.id, "fit_score": 95}, {"pool_id": teak_desk.id, "fit_score": 90}],
+        "suggestions": [{"pool_id": oak.id, "fit_score": 80}],
+        "hidden_matches": [],
+    }
+
+    r = client.post("/api/recommend", json={"text": "walnut"}, headers=as_user(world["alice"]))
+
+    body = r.json()
+    shown = {rec["pool"]["id"] for rec in body["recommendations"]}
+    assert body["parsed"]["category"] is None
+    # the model's off-material picks are gone; the walnut Pools it skipped are found anyway
+    assert shown == {world["table"].id, world["sofa"].id, world["lamp"].id, walnut_shelf.id}  # all walnut-tagged
+    assert body["suggestions"] == []
+
+
+def test_a_material_search_is_stable_across_different_model_answers(client, session, world, claude):
+    outputs = [
+        {"parsed": {"style_tags": ["walnut"]}, "pool_matches": [], "hidden_matches": []},
+        {"parsed": {"style_tags": []},
+         "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 61}], "hidden_matches": []},
+    ]
+    results = []
+    for output in outputs:
+        claude.output = output
+        r = client.post("/api/recommend", json={"text": "walnut"}, headers=as_user(world["alice"]))
+        results.append({rec["pool"]["id"] for rec in r.json()["recommendations"]})
+    assert results[0] == results[1] == {world["table"].id, world["sofa"].id, world["lamp"].id}
+
+
+def test_a_table_wish_covers_coffee_tables_but_a_chair_wish_covers_seating(client, session, world, claude):
+    retailer_id = session.get(Product, world["table"].product_id).retailer_id
+    coffee = _add_pool(session, retailer_id, "Low Coffee Table", "table", ["oak"])
+    armchair = _add_pool(session, retailer_id, "Accent Armchair", "seating", ["oak"])
+    claude.output = {
+        "parsed": {"category": "table", "style_tags": []},
+        "pool_matches": [{"pool_id": coffee.id, "fit_score": 90}, {"pool_id": world["table"].id, "fit_score": 85},
+                         {"pool_id": armchair.id, "fit_score": 70}],
+        "hidden_matches": [],
+    }
+    r = client.post("/api/recommend", json={"text": "a table"}, headers=as_user(world["alice"]))
+    assert [x["pool"]["id"] for x in r.json()["recommendations"]] == [world["table"].id, coffee.id]
+    assert r.json()["suggestions"] == []  # the model's armchair pick is not a table
+
+    r = client.post("/api/recommend", json={"text": "a chair"}, headers=as_user(world["alice"]))
+    assert [x["pool"]["id"] for x in r.json()["recommendations"]] == [armchair.id]

@@ -163,7 +163,7 @@ def test_hidden_matches_never_appear_in_the_response(client, world, claude):
     body = r.json()
     assert set(body) == {"wish_id", "parsed", "recommendations", "suggestions"}
     assert body["recommendations"] == []
-    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["pool"].id]
+    assert body["suggestions"] == []  # the Linen Sofa is not walnut, so it is not even suggested
     assert "Walnut Dining Table" not in r.text
     assert total_hits(client, world) == 1
 
