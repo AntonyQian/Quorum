@@ -204,11 +204,10 @@ class ParsedWishOut(BaseModel):
 
 class Recommendation(BaseModel):
     pool: PoolSummary
-    fit_score: int
-    reason: str
 
 
 class RecommendResponse(BaseModel):
     wish_id: int
     parsed: ParsedWishOut
     recommendations: list[Recommendation]
+    suggestions: list[Recommendation] = []

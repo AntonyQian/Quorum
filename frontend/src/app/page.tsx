@@ -1,12 +1,10 @@
-import { PoolBrowser } from "@/components/pool-browser";
 import { RoleGate } from "@/components/role-gate";
-import { WishBox } from "@/components/wish-box";
+import { ShopperHome } from "@/components/shopper-home";
 
 export default function HomePage() {
   return (
     <RoleGate role="shopper">
-      <WishBox />
-      <PoolBrowser />
+      <ShopperHome />
     </RoleGate>
   );
 }

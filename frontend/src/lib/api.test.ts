@@ -88,7 +88,7 @@ describe("mock API client", () => {
     expect(notifications.items[0]?.link).toBe("/pools/3");
 
     const recommendation = await api.recommend("walnut dining table");
-    expect(recommendation.recommendations[0]?.fit_score).toBe(91);
+    expect(recommendation.recommendations[0]?.pool.id).toBeDefined();
     expect(recommendation.parsed.category).toBe("dining_table");
 
     const products = await api.listRetailerProducts();

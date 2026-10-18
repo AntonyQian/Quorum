@@ -134,12 +134,13 @@ def test_the_retailer_is_alerted_once_when_the_threshold_is_reached(client, worl
 
 def test_hidden_matches_never_appear_in_the_response(client, world, claude):
     r = wish(client, claude, world["shoppers"][0], world["table"], 95, pool_matches=[
-        {"pool_id": world["pool"].id, "fit_score": 70, "reason": "Linen, seats 3."},
+        {"pool_id": world["pool"].id, "fit_score": 70},
     ])
 
     body = r.json()
-    assert set(body) == {"wish_id", "parsed", "recommendations"}
-    assert [rec["pool"]["id"] for rec in body["recommendations"]] == [world["pool"].id]
+    assert set(body) == {"wish_id", "parsed", "recommendations", "suggestions"}
+    assert body["recommendations"] == []
+    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["pool"].id]
     assert "Walnut Dining Table" not in r.text
     assert total_hits(client, world) == 1
 

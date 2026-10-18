@@ -95,16 +95,13 @@ export type Order = {
 export type RecommendResponse = {
   wish_id: number;
   parsed: {
-    category: string;
+    category: string | null;
     budget_max_cents: number | null;
     style_tags: string[];
-    size_notes: string;
+    size_notes: string | null;
   };
-  recommendations: {
-    pool: PoolSummary;
-    fit_score: number;
-    reason: string;
-  }[];
+  recommendations: { pool: PoolSummary }[];
+  suggestions: { pool: PoolSummary }[];
 };
 
 export type PoolCreate = {

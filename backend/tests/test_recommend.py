@@ -83,8 +83,8 @@ def test_recommend_returns_wish_id_parsed_and_ranked_pool_summaries(client, worl
     claude.output = {
         "parsed": PARSED,
         "pool_matches": [
-            {"pool_id": world["sofa"].id, "fit_score": 60, "reason": "Walnut, but a sofa."},
-            {"pool_id": world["table"].id, "fit_score": 91, "reason": "Solid walnut, seats 4."},
+            {"pool_id": world["sofa"].id, "fit_score": 60},
+            {"pool_id": world["table"].id, "fit_score": 91},
         ],
         "hidden_matches": [],
     }
@@ -93,18 +93,17 @@ def test_recommend_returns_wish_id_parsed_and_ranked_pool_summaries(client, worl
 
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == {"wish_id", "parsed", "recommendations"}
+    assert set(body) == {"wish_id", "parsed", "recommendations", "suggestions"}
     assert isinstance(body["wish_id"], int)
     assert body["parsed"] == PARSED
-    assert [rec["pool"]["id"] for rec in body["recommendations"]] == [world["table"].id, world["sofa"].id]
+    assert [rec["pool"]["id"] for rec in body["recommendations"]] == [world["table"].id]
+    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["sofa"].id]
     first = body["recommendations"][0]
-    assert set(first) == {"pool", "fit_score", "reason"}
+    assert set(first) == {"pool"}
     assert set(first["pool"]) == SUMMARY_KEYS
-    assert first["fit_score"] == 91
-    assert first["reason"] == "Solid walnut, seats 4."
 
 
-def test_only_live_pools_scoring_50_or_more_are_returned_and_at_most_6(client, session, world, claude):
+def test_only_live_pools_scoring_60_or_more_are_returned_and_at_most_6(client, session, world, claude):
     extra = []
     for i in range(6):
         prod = Product(retailer_id=1, name=f"Table {i}", category="dining_table", list_price_cents=80_000,
@@ -120,11 +119,11 @@ def test_only_live_pools_scoring_50_or_more_are_returned_and_at_most_6(client, s
     claude.output = {
         "parsed": PARSED,
         "pool_matches": [
-            {"pool_id": world["sofa"].id, "fit_score": 49, "reason": "Too far off."},
-            {"pool_id": world["done"].id, "fit_score": 99, "reason": "Already closed."},
-            {"pool_id": 9999, "fit_score": 98, "reason": "Made up."},
-            {"pool_id": world["lamp"].id, "fit_score": 50, "reason": "Locked, still joinable."},
-            *[{"pool_id": pid, "fit_score": 60 + n, "reason": "Table."} for n, pid in enumerate(extra)],
+            {"pool_id": world["sofa"].id, "fit_score": 49},
+            {"pool_id": world["done"].id, "fit_score": 99},
+            {"pool_id": 9999, "fit_score": 98},
+            {"pool_id": world["lamp"].id, "fit_score": 59},
+            *[{"pool_id": pid, "fit_score": 60 + n} for n, pid in enumerate(extra)],
         ],
         "hidden_matches": [],
     }
@@ -133,7 +132,7 @@ def test_only_live_pools_scoring_50_or_more_are_returned_and_at_most_6(client, s
 
     assert r.status_code == 200, r.text
     recs = r.json()["recommendations"]
-    assert [rec["fit_score"] for rec in recs] == [65, 64, 63, 62, 61, 60]
+    assert len(recs) == 6
     assert world["lamp"].id not in [rec["pool"]["id"] for rec in recs]  # 7th best, cut by the cap
 
 
@@ -159,7 +158,7 @@ def test_a_live_pool_on_a_hidden_product_is_never_a_public_candidate(client, ses
     session.commit()
     session.add(Tier(pool_id=pool.id, ordinal=1, min_participants=3, discount_cents=10_000))
     session.commit()
-    claude.output = {"parsed": PARSED, "pool_matches": [{"pool_id": pool.id, "fit_score": 99, "reason": "x"}],
+    claude.output = {"parsed": PARSED, "pool_matches": [{"pool_id": pool.id, "fit_score": 99}],
                      "hidden_matches": []}
 
     r = client.post("/api/recommend", json={"text": "a bench"}, headers=as_user(world["alice"]))
@@ -177,6 +176,35 @@ def test_the_wish_is_saved_with_its_parsed_fields(client, session, world, claude
     assert wish.text == "walnut dining table for 4"
     assert wish.parsed == PARSED
     assert wish.created_at == T0  # Sim Clock
+
+
+def test_table_under_50_over_budget_pool_is_only_a_suggestion(client, world, claude):
+    claude.output = {
+        "parsed": {"category": None, "budget_max_cents": None, "style_tags": [], "size_notes": None},
+        "pool_matches": [{"pool_id": world["table"].id, "fit_score": 80}],
+        "suggestions": [],
+        "hidden_matches": [],
+    }
+
+    r = client.post("/api/recommend", json={"text": "table under 50"}, headers=as_user(world["alice"]))
+
+    body = r.json()
+    assert body["parsed"]["budget_max_cents"] == 5_000
+    assert body["recommendations"] == []
+    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["table"].id]
+def test_over_budget_primary_matches_become_suggestions(client, world, claude):
+    claude.output = {
+        "parsed": {"category": "chair", "budget_max_cents": 20_000, "style_tags": [], "size_notes": None},
+        "pool_matches": [{"pool_id": world["sofa"].id, "fit_score": 99}],
+        "suggestions": [],
+        "hidden_matches": [],
+    }
+
+    r = client.post("/api/recommend", json={"text": "chair under 200"}, headers=as_user(world["alice"]))
+
+    body = r.json()
+    assert body["recommendations"] == []
+    assert [rec["pool"]["id"] for rec in body["suggestions"]] == [world["sofa"].id]
 
 
 def test_missing_parsed_fields_come_back_as_null(client, world, claude):

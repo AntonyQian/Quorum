@@ -14,12 +14,14 @@ from sqlmodel import Session, select
 
 from app import config
 from app.models import Pool, Product, User, Wish
-from app.schemas import Recommendation, RecommendResponse
+from app.schemas import PoolSummary, Recommendation, RecommendResponse
 from app.services import clock, demand, pool_engine, views
+from app.services.wish_constraints import merge_parsed_fields
 
-MIN_FIT_SCORE = 50
+MIN_DISPLAY_FIT_SCORE = 60
 MIN_DEMAND_FIT_SCORE = 60
 MAX_RECOMMENDATIONS = 6
+MAX_SUGGESTIONS = 3
 
 
 class RecommenderError(Exception):
@@ -38,18 +40,18 @@ class ParsedWish(BaseModel):
 
 class PoolMatch(BaseModel):
     pool_id: int
-    fit_score: int
-    reason: str
+    fit_score: int = Field(ge=0, le=100)
 
 
 class HiddenMatch(BaseModel):
     product_id: int
-    fit_score: int
+    fit_score: int = Field(ge=0, le=100)
 
 
 class RecommenderOutput(BaseModel):
     parsed: ParsedWish
     pool_matches: list[PoolMatch]
+    suggestions: list[PoolMatch] = Field(default_factory=list)
     hidden_matches: list[HiddenMatch]
 
 
@@ -63,12 +65,15 @@ Given a shopper's Wish and the candidate items, return:
 (null if unclear); budget_max_cents is their maximum budget in integer US cents (null if not stated); \
 style_tags are short lowercase materials or styles; size_notes is a short phrase about size or seating \
 (null if none).
-- pool_matches: one entry per public Pool that plausibly fits, with fit_score from 0 to 100 and a one-line \
-reason addressed to the shopper (under 120 characters) that mentions concrete facts such as material, size, \
-price if the Pool locks, or how many more people the next tier needs. Only use pool ids from the list. \
-Score a Pool over the shopper's budget lower, and a different kind of item much lower.
-- hidden_matches: one entry per hidden listing that fits, with fit_score from 0 to 100. Only use product \
-ids from the list. Never mention hidden listings in a reason.
+- pool_matches: ONLY public Pools that satisfy every constraint the shopper stated. If they gave a budget, \
+the Pool's current_price_cents in the candidate JSON must be less than or equal to budget_max_cents. If \
+they implied a category (parsed.category is set), the Pool's category must match. Each entry is pool_id \
+and fit_score (0–100). Only include fit_score 60 or higher.
+- suggestions: related Pools that miss at least one stated constraint (over budget, different category) but \
+might still interest the shopper. pool_id and fit_score only; include only fit_score 60 or higher. Leave \
+empty when nothing qualifies.
+- hidden_matches: one entry per hidden listing that fits the Wish, with fit_score from 0 to 100. Only use \
+product ids from the list.
 
 Prices in the candidates are integer cents."""
 
@@ -159,13 +164,72 @@ def complete(prompt: str) -> RecommenderOutput:
 # --- the use case -------------------------------------------------------------
 
 
-def _ranked_pool_matches(output: RecommenderOutput, pools_by_id: dict[int, Pool]) -> list[PoolMatch]:
+def _product_for_pool(session: Session, pool: Pool) -> Product:
+    return session.get(Product, pool.product_id)  # type: ignore[return-value]
+
+
+def meets_stated_constraints(summary: PoolSummary, product: Product, parsed: ParsedWish) -> bool:
+    """Hard gate for primary recommendations (budget and category when the Wish states them)."""
+    if parsed.budget_max_cents is not None and summary.current_price_cents > parsed.budget_max_cents:
+        return False
+    if parsed.category is not None and product.category != parsed.category:
+        return False
+    return True
+
+
+def _dedupe_ranked(
+    matches: list[PoolMatch],
+    pools_by_id: dict[int, Pool],
+    min_score: int,
+    limit: int,
+    exclude: set[int] | None = None,
+) -> list[PoolMatch]:
+    skip = exclude or set()
     best: dict[int, PoolMatch] = {}
-    for m in output.pool_matches:
-        if m.pool_id in pools_by_id and m.fit_score >= MIN_FIT_SCORE:
-            if m.pool_id not in best or m.fit_score > best[m.pool_id].fit_score:
-                best[m.pool_id] = m
-    return sorted(best.values(), key=lambda m: m.fit_score, reverse=True)[:MAX_RECOMMENDATIONS]
+    for m in matches:
+        if m.pool_id not in pools_by_id or m.pool_id in skip or m.fit_score < min_score:
+            continue
+        if m.pool_id not in best or m.fit_score > best[m.pool_id].fit_score:
+            best[m.pool_id] = m
+    return sorted(best.values(), key=lambda m: m.fit_score, reverse=True)[:limit]
+
+
+def _partition_matches(
+    session: Session,
+    output: RecommenderOutput,
+    pools_by_id: dict[int, Pool],
+) -> tuple[list[PoolMatch], list[PoolMatch]]:
+    """Enforce constraints in code so bad model output cannot surface as primary picks."""
+    strict: list[PoolMatch] = []
+    loose: list[PoolMatch] = []
+    parsed = output.parsed
+
+    for m in output.pool_matches + output.suggestions:
+        pool = pools_by_id.get(m.pool_id)
+        if pool is None:
+            continue
+        summary = views.pool_summary(session, pool)
+        product = _product_for_pool(session, pool)
+        bucket = strict if meets_stated_constraints(summary, product, parsed) else loose
+        bucket.append(m)
+
+    recommendations = _dedupe_ranked(strict, pools_by_id, MIN_DISPLAY_FIT_SCORE, MAX_RECOMMENDATIONS)
+    rec_ids = {m.pool_id for m in recommendations}
+    suggestions = _dedupe_ranked(
+        loose, pools_by_id, MIN_DISPLAY_FIT_SCORE, MAX_SUGGESTIONS, exclude=rec_ids,
+    )
+    return recommendations, suggestions
+
+
+def _to_recommendations(
+    session: Session,
+    matches: list[PoolMatch],
+    pools_by_id: dict[int, Pool],
+) -> list[Recommendation]:
+    return [
+        Recommendation(pool=views.pool_summary(session, pools_by_id[m.pool_id]))
+        for m in matches
+    ]
 
 
 def in_price_band(match: HiddenMatch, product: Product, budget_max_cents: int | None) -> bool:
@@ -192,19 +256,20 @@ def recommend(session: Session, user: User, text: str) -> RecommendResponse:
     prompt = build_prompt(text, [_pool_candidate(session, p) for p in pools], [_hidden_candidate(p) for p in hidden])
 
     output = complete(prompt)
+    merged = merge_parsed_fields(text, output.parsed.model_dump())
+    output.parsed = ParsedWish.model_validate(merged)
 
-    wish = Wish(user_id=user.id, text=text, parsed=output.parsed.model_dump(), created_at=clock.now(session))
+    wish = Wish(user_id=user.id, text=text, parsed=merged, created_at=clock.now(session))
     session.add(wish)
     session.commit()
     session.refresh(wish)
     record_demand_hits(session, user, wish, output, {p.id: p for p in hidden})
 
+    rec_matches, suggestion_matches = _partition_matches(session, output, pools_by_id)
+
     return RecommendResponse(
         wish_id=wish.id,
         parsed=wish.parsed,
-        recommendations=[
-            Recommendation(pool=views.pool_summary(session, pools_by_id[m.pool_id]), fit_score=m.fit_score,
-                           reason=m.reason)
-            for m in _ranked_pool_matches(output, pools_by_id)
-        ],
+        recommendations=_to_recommendations(session, rec_matches, pools_by_id),
+        suggestions=_to_recommendations(session, suggestion_matches, pools_by_id),
     )

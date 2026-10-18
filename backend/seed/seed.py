@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 from app.db import drop_db, engine, init_db
 from app.models import DemandHit, Pool, PoolMember, Product, Retailer, Tier, User, Wish
 from app.services import clock, payments, pool_engine
+from seed.images import image_for
 
 SEED_FILE = Path(__file__).with_name("seed.json")
 CARD = payments.WORKING_CARD_LABEL
@@ -46,6 +47,7 @@ def seed(session: Session) -> None:
     for p in data["products"]:
         pool_spec, hidden_spec = p.get("pool"), p.get("hidden")
         fields = {k: v for k, v in p.items() if k not in ("retailer", "pool", "hidden")}
+        fields["image_url"] = image_for(fields["name"], fields["category"])
         product = Product(
             retailer_id=retailers[p["retailer"]].id,
             visibility="public" if pool_spec else "hidden",

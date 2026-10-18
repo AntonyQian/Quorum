@@ -410,14 +410,8 @@ export const recommendation: RecommendResponse = {
     style_tags: ["maple"],
     size_notes: "seats 4",
   },
-  recommendations: [
-    {
-      pool: poolSummaries[0]!,
-      fit_score: 91,
-      reason:
-        "Solid maple, seats 4, $640.00 if it locks, 2 people from the next tier.",
-    },
-  ],
+  recommendations: [{ pool: poolSummaries[0]! }],
+  suggestions: [],
 };
 
 const walnut: RetailerProduct = {

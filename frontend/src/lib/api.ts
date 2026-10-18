@@ -144,10 +144,15 @@ export function createApi(deps: ApiDeps) {
 
     recommend(text: string): Promise<RecommendResponse> {
       if (deps.useMocks) return Promise.resolve(recommendation);
-      return request("/api/recommend", {
+      return request<RecommendResponse>("/api/recommend", {
         method: "POST",
         body: JSON.stringify({ text }),
-      });
+      }).then((body) => ({
+        wish_id: body.wish_id,
+        parsed: body.parsed,
+        recommendations: body.recommendations.map((entry) => ({ pool: entry.pool })),
+        suggestions: (body.suggestions ?? []).map((entry) => ({ pool: entry.pool })),
+      }));
     },
 
     listOrders(): Promise<Order[]> {

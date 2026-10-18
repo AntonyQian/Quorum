@@ -82,6 +82,18 @@ export const poolStatus: Record<
   },
 };
 
+/** Shopper cart drawer: glass panel from the right. */
+export const cart = {
+  backdrop:
+    "fixed inset-0 z-[60] bg-foreground/15 backdrop-blur-sm transition-opacity duration-300 data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+  panel:
+    "fixed inset-y-0 right-0 z-[60] flex h-full w-full max-w-md flex-col overflow-hidden border-l border-border/50 bg-background/60 shadow-2xl backdrop-blur-2xl outline-none transition-transform duration-300 ease-out data-[starting-style]:translate-x-full data-[ending-style]:translate-x-full supports-[backdrop-filter]:bg-background/45",
+  header: "flex shrink-0 items-center justify-between gap-3 border-b border-border/40 px-5 py-4",
+  body: "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4",
+  item:
+    "flex gap-3 rounded-xl border border-border/50 bg-background/40 p-3 backdrop-blur-md transition-colors hover:bg-background/55",
+} as const;
+
 /** The Demo drawer: a panel sliding in from the right over a dimmed page. */
 export const demo = {
   backdrop:
