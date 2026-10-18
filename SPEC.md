@@ -113,7 +113,7 @@ elif pool.status == "locked":
     charge_pending(current_price)                    # late joiners, and Members left pending by an outage
 
 if pool.status == "locked" and no pending members:
-    if now >= pool.deadline or (pool.stock_cap and active_count >= pool.stock_cap):
+    if now >= pool.deadline or active_count >= tiers[-1].min_participants or (pool.stock_cap and active_count >= pool.stock_cap):
         final = tier_price(current_tier)            # tier from charged count
         for m in charged members:
             owed = m.charged_cents - final - m.refunded_cents
@@ -122,6 +122,7 @@ if pool.status == "locked" and no pending members:
         else: pool.status = "completed"; pool.final_price_cents = final; notify members + retailer
 ```
 
+- A locked Pool that reaches its top Tier settles immediately (nothing cheaper is left), so Tier Refunds go out at once and later Joins get `pool_not_joinable`.
 - A locked Pool whose stock cap is full completes on its next `evaluate_pool`, so a Join on it gets `pool_not_joinable`; `stock_cap_reached` applies only while the cap is full and the Pool hasn't settled yet.
 - Join on a `locked` Pool adds a `pending` Member and calls `evaluate_pool`, which charges them immediately at the current Tier price (after counting the new member). If the payment provider is unavailable, the Join still succeeds and the Member stays `pending` until a later evaluation charges them.
 - Settlement waits while any Member is `pending` or any Tier Refund has failed, so a Pool can stay `locked` past its deadline during a payment-provider outage. Each charge and refund is committed as soon as it is made, and a refund is never issued twice.

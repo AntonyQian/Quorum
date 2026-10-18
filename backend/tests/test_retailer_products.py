@@ -216,7 +216,8 @@ def _pool_with_members(session, world):
                 locked_at=T0)
     session.add(pool)
     session.commit()
-    session.add(Tier(pool_id=pool.id, ordinal=1, min_participants=2, discount_cents=20_000))
+    session.add_all([Tier(pool_id=pool.id, ordinal=1, min_participants=2, discount_cents=20_000),
+                     Tier(pool_id=pool.id, ordinal=2, min_participants=10, discount_cents=30_000)])
     bob, carol, dan = (User(name=n, role="shopper", card_label="Visa") for n in ("Bob", "Carol", "Dan"))
     session.add_all([bob, carol, dan])
     session.commit()

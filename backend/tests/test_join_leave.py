@@ -216,7 +216,7 @@ def test_join_locked_pool_charges_now_at_the_tier_price_after_counting_the_new_m
     r = join(client, pool, world["bob"])  # 5th member reaches Tier 2: $1000 - $150
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["status"] == "locked"
+    assert body["status"] == "completed"  # the top Tier is reached, so the Pool settles at once
     assert body["participants"] == 5
     assert body["my_membership"] == {"status": "charged", "charged_cents": 85_000, "refunded_cents": 0}
     charge = session.exec(select(Payment).where(Payment.amount_cents == 85_000)).one()

@@ -82,9 +82,9 @@ def test_simulated_joins_on_a_locked_pool_are_charged_immediately_at_the_current
     r = simulate(client, pool_id, count=2)  # 4th pays Tier 1 ($900), 5th reaches Tier 2 ($850)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert (body["status"], body["participants"], body["current_price_cents"]) == ("locked", 5, 85_000)
+    assert (body["status"], body["participants"], body["current_price_cents"]) == ("completed", 5, 85_000)
     amounts = [p.amount_cents for p in session.exec(select(Payment).order_by(Payment.id)).all()]
-    assert amounts == [90_000, 90_000, 90_000, 90_000, 85_000]
+    assert amounts[:5] == [90_000, 90_000, 90_000, 90_000, 85_000]  # then the four Tier Refunds
 
 
 def test_declining_card_on_a_locked_pool_is_dropped_without_failing_the_request(client, session, world):
@@ -99,7 +99,7 @@ def test_declining_card_on_a_locked_pool_is_dropped_without_failing_the_request(
 def test_simulate_joins_creates_simulated_shoppers_when_the_seeded_ones_run_out(client, session, world):
     r = simulate(client, world["pool"].id, count=6)  # only 4 card-saved sims exist
     assert r.status_code == 200, r.text
-    assert r.json()["participants"] == 6
+    assert r.json()["participants"] == 5  # joining stops once the top Tier settles the Pool
     sims = session.exec(select(User).where(User.is_simulated == True)).all()  # noqa: E712
     assert len(sims) == 7  # 4 + 1 declining + 2 new
 

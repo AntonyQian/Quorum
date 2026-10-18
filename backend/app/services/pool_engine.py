@@ -131,7 +131,9 @@ def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> 
     if pool.status == "locked":
         count = active_count(session, pool)
         unresolved = get_members(session, pool, ("pending",))
-        if not unresolved and (now >= pool.deadline or (pool.stock_cap and count >= pool.stock_cap)):
+        top_tier_reached = count >= tiers[-1].min_participants  # no cheaper price left, so refunds go out now
+        if not unresolved and (now >= pool.deadline or top_tier_reached
+                               or (pool.stock_cap and count >= pool.stock_cap)):
             _settle(session, pool, product, tiers, now, link)
 
     session.add(pool)

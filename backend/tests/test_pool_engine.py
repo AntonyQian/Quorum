@@ -76,7 +76,7 @@ def test_lock_charges_the_highest_reached_tier_when_members_skip_past_tier_one(s
     pool = make_pool(session)
     members = [join(session, pool, n) for n in "abcde"]  # 5 pending: Tier 2 already reached
     pool_engine.evaluate_pool(session, pool)
-    assert pool.status == "locked"
+    assert pool.status == "completed"  # Tier 2 is the top Tier, so the Pool settles right after Locking
     for m in members:
         session.refresh(m)
         assert (m.status, m.charged_cents) == ("charged", 85_000)

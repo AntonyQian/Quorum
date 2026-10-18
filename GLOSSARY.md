@@ -65,7 +65,7 @@ The moment a Pool reaches its first Tier; every Member is charged and nobody can
 _Avoid_: Confirm, trigger, tip
 
 **Settlement**:
-The closing of a Locked Pool at its Deadline or Stock Cap, when the final Tier is fixed and every Member is refunded the difference between what they paid and the final price.
+The closing of a Locked Pool at its Deadline, Stock Cap, or top Tier, when the final Tier is fixed and every Member is refunded the difference between what they paid and the final price.
 _Avoid_: Close-out, finalize
 
 **Tier Refund**:
