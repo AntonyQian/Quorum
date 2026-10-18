@@ -1,9 +1,12 @@
 """Build the SPEC §8 response shapes from database rows."""
 
+from datetime import timedelta
+
 from sqlmodel import Session, select
 
-from app.models import Payment, Pool, PoolMember, Product, Retailer, User
+from app.models import DemandHit, Payment, Pool, PoolMember, Product, Retailer, User
 from app.schemas import (
+    DemandSummary,
     MyMembership,
     Order,
     PaymentLine,
@@ -12,6 +15,9 @@ from app.schemas import (
     PoolSummary,
     ProductCard,
     ProductDetailCard,
+    RetailerPoolDetail,
+    RetailerPoolMember,
+    RetailerProduct,
     TierOut,
     UserOut,
 )
@@ -124,4 +130,52 @@ def order(session: Session, member: PoolMember) -> Order:
             PaymentLine(kind=p.kind, amount_cents=p.amount_cents, status=p.status, created_at=clock.iso(p.created_at))
             for p in pays
         ],
+    )
+
+
+def demand_summary(session: Session, product: Product) -> DemandSummary:
+    hits = session.exec(select(DemandHit).where(DemandHit.product_id == product.id)).all()
+    week_ago = clock.now(session) - timedelta(days=7)
+    total = len(hits)
+    return DemandSummary(
+        total_hits=total,
+        last_7_days=sum(1 for h in hits if h.created_at >= week_ago),
+        threshold=product.demand_threshold,
+        threshold_reached=product.demand_threshold is not None and total >= product.demand_threshold,
+    )
+
+
+def latest_pool(session: Session, product: Product) -> Pool | None:
+    return session.exec(select(Pool).where(Pool.product_id == product.id).order_by(Pool.id.desc())).first()
+
+
+def retailer_pool_detail(session: Session, pool: Pool) -> RetailerPoolDetail:
+    """PoolDetail plus every Member (including those who left) and net revenue (charges minus refunds)."""
+    rows = session.exec(
+        select(PoolMember, User)
+        .join(User, User.id == PoolMember.user_id)
+        .where(PoolMember.pool_id == pool.id)
+        .order_by(PoolMember.joined_at, PoolMember.id)
+    ).all()
+    detail = pool_detail(session, pool, None)
+    return RetailerPoolDetail(
+        **detail.model_dump(),
+        members=[
+            RetailerPoolMember(name=u.name, status=m.status, charged_cents=m.charged_cents,
+                               refunded_cents=m.refunded_cents, joined_at=clock.iso(m.joined_at))
+            for m, u in rows
+        ],
+        revenue_cents=sum(m.charged_cents - m.refunded_cents for m, _ in rows),
+    )
+
+
+def retailer_product(session: Session, product: Product) -> RetailerProduct:
+    hidden = product.visibility == "hidden"
+    pool = None if hidden else latest_pool(session, product)
+    return RetailerProduct(
+        **_card_fields(session, product),
+        visibility=product.visibility,
+        floor_price_cents=product.floor_price_cents,
+        demand=demand_summary(session, product) if hidden else None,
+        pool=pool_summary(session, pool) if pool else None,
     )

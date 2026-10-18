@@ -110,3 +110,70 @@ class NotificationOut(BaseModel):
 class NotificationList(BaseModel):
     unread: int
     items: list[NotificationOut]
+
+
+class RetailerPoolMember(BaseModel):
+    name: str
+    status: MemberStatus
+    charged_cents: int
+    refunded_cents: int
+    joined_at: str
+
+
+class RetailerPoolDetail(PoolDetail):
+    members: list[RetailerPoolMember]
+    revenue_cents: int
+
+
+class TierCreate(BaseModel):
+    min_participants: int
+    discount_cents: int
+
+
+class PoolCreate(BaseModel):
+    deadline_days: int  # 1-30, checked by catalog.validate_pool (invalid_tiers)
+    stock_cap: int | None = None
+    tiers: list[TierCreate]
+
+
+class ProductUpdate(BaseModel):
+    """Partial ProductCreate without `pool` (PATCH /retailer/products/{id})."""
+
+    name: str | None = None
+    description: str | None = None
+    category: str | None = None
+    style_tags: list[str] | None = None
+    dimensions: str | None = None
+    image_url: str | None = None
+    list_price_cents: int | None = None
+    floor_price_cents: int | None = None
+    visibility: Literal["hidden", "public"] | None = None
+    demand_threshold: int | None = None
+
+
+class ProductCreate(BaseModel):
+    name: str
+    description: str
+    category: str
+    style_tags: list[str]
+    dimensions: str
+    image_url: str
+    list_price_cents: int
+    floor_price_cents: int
+    visibility: Literal["hidden", "public"]
+    demand_threshold: int | None = None
+    pool: PoolCreate | None = None
+
+
+class DemandSummary(BaseModel):
+    total_hits: int
+    last_7_days: int
+    threshold: int | None
+    threshold_reached: bool
+
+
+class RetailerProduct(ProductCard):
+    visibility: Literal["hidden", "public"]
+    floor_price_cents: int
+    demand: DemandSummary | None
+    pool: PoolSummary | None
