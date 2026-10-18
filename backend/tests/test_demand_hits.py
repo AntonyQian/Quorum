@@ -61,13 +61,29 @@ def claude(monkeypatch):
     return stub
 
 
-def wish(client, claude, shopper, product, fit_score, budget=None, pool_matches=()):
+def wish(
+    client,
+    claude,
+    shopper,
+    product,
+    fit_score,
+    budget=None,
+    pool_matches=(),
+    *,
+    text="walnut dining table for 4",
+    parsed=None,
+):
     claude.output = {
-        "parsed": {"category": "dining_table", "budget_max_cents": budget, "style_tags": [], "size_notes": None},
+        "parsed": parsed or {
+            "category": "dining_table",
+            "budget_max_cents": budget,
+            "style_tags": [],
+            "size_notes": None,
+        },
         "pool_matches": list(pool_matches),
         "hidden_matches": [{"product_id": product.id, "fit_score": fit_score}],
     }
-    r = client.post("/api/recommend", json={"text": "walnut dining table for 4"}, headers=as_user(shopper))
+    r = client.post("/api/recommend", json={"text": text}, headers=as_user(shopper))
     assert r.status_code == 200, r.text
     return r
 
@@ -98,12 +114,19 @@ def test_hidden_listings_are_in_the_prompt_with_their_floor_price(client, world,
     (60, None, True),         # no budget stated
     (60, FLOOR, True),        # budget exactly at the Floor Price
     (95, FLOOR + 1, True),
-    (59, None, False),        # fit too low
+    (59, None, False),        # fit too low (vague wish so deterministic matching does not rescue)
     (90, FLOOR - 1, False),   # budget below the Floor Price
 ])
 def test_a_demand_hit_needs_fit_60_and_a_budget_missing_or_at_least_the_floor(client, world, claude,
                                                                                fit_score, budget, hit):
-    wish(client, claude, world["shoppers"][0], world["table"], fit_score, budget)
+    if fit_score == 59 and not hit:
+        wish(
+            client, claude, world["shoppers"][0], world["table"], fit_score, budget,
+            text="hello",
+            parsed={"category": None, "budget_max_cents": budget, "style_tags": [], "size_notes": None},
+        )
+    else:
+        wish(client, claude, world["shoppers"][0], world["table"], fit_score, budget)
 
     assert total_hits(client, world) == (1 if hit else 0)
 
@@ -145,8 +168,25 @@ def test_hidden_matches_never_appear_in_the_response(client, world, claude):
     assert total_hits(client, world) == 1
 
 
+def test_demand_hit_when_llm_omits_hidden_matches_but_text_matches_listing(client, world, claude):
+    claude.output = {
+        "parsed": {"category": None, "budget_max_cents": None, "style_tags": [], "size_notes": None},
+        "pool_matches": [],
+        "hidden_matches": [],
+    }
+    r = client.post(
+        "/api/recommend",
+        json={"text": "walnut dinning table"},
+        headers=as_user(world["shoppers"][0]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["parsed"]["category"] == "dining_table"
+    assert "walnut" in r.json()["parsed"]["style_tags"]
+    assert total_hits(client, world) == 1
+
+
 def test_matches_on_products_that_are_not_hidden_listings_are_ignored(client, session, world, claude):
-    wish(client, claude, world["shoppers"][0], world["sofa"], 95)  # public Product
+    wish(client, claude, world["shoppers"][0], world["sofa"], 95, text="linen sofa")  # public Product
     claude.output["hidden_matches"] = [{"product_id": 9999, "fit_score": 95}]  # made up
     r = client.post("/api/recommend", json={"text": "anything"}, headers=as_user(world["shoppers"][1]))
 

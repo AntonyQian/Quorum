@@ -10,3 +10,5 @@ MOCK_PAYMENTS = os.getenv("MOCK_PAYMENTS", "true").lower() == "true"
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./quorum.db")
+# When false, /api/demo/* returns 404 (production). Seed still loads; panel is frontend-gated too.
+DEMO_PANEL_ENABLED = os.getenv("DEMO_PANEL_ENABLED", "false").lower() == "true"

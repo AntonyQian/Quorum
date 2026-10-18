@@ -16,7 +16,7 @@ from app import config
 from app.models import Pool, Product, User, Wish
 from app.schemas import PoolSummary, Recommendation, RecommendResponse
 from app.services import clock, demand, pool_engine, views
-from app.services.wish_constraints import merge_parsed_fields
+from app.services.wish_constraints import hidden_product_fit_score, merge_parsed_fields
 
 MIN_DISPLAY_FIT_SCORE = 60
 MIN_DEMAND_FIT_SCORE = 60
@@ -239,6 +239,31 @@ def in_price_band(match: HiddenMatch, product: Product, budget_max_cents: int | 
         budget_max_cents is None or budget_max_cents >= product.floor_price_cents)
 
 
+def _deterministic_hidden_matches(
+    text: str,
+    parsed: ParsedWish,
+    hidden: list[Product],
+) -> list[HiddenMatch]:
+    matches: list[HiddenMatch] = []
+    parsed_dict = parsed.model_dump()
+    for product in hidden:
+        score = hidden_product_fit_score(text, parsed_dict, product)
+        if score >= MIN_DEMAND_FIT_SCORE:
+            matches.append(HiddenMatch(product_id=product.id, fit_score=score))
+    return matches
+
+
+def _merge_hidden_matches(
+    llm_matches: list[HiddenMatch],
+    deterministic: list[HiddenMatch],
+) -> list[HiddenMatch]:
+    best: dict[int, HiddenMatch] = {}
+    for match in llm_matches + deterministic:
+        if match.product_id not in best or match.fit_score > best[match.product_id].fit_score:
+            best[match.product_id] = match
+    return list(best.values())
+
+
 def record_demand_hits(session: Session, user: User, wish: Wish, output: RecommenderOutput,
                        hidden_by_id: dict[int, Product]) -> None:
     """Turn hidden matches in the Price Band into Demand Hits (`demand` deduplicates and sends the alert)."""
@@ -258,6 +283,10 @@ def recommend(session: Session, user: User, text: str) -> RecommendResponse:
     output = complete(prompt)
     merged = merge_parsed_fields(text, output.parsed.model_dump())
     output.parsed = ParsedWish.model_validate(merged)
+    output.hidden_matches = _merge_hidden_matches(
+        output.hidden_matches,
+        _deterministic_hidden_matches(text, output.parsed, hidden),
+    )
 
     wish = Wish(user_id=user.id, text=text, parsed=merged, created_at=clock.now(session))
     session.add(wish)

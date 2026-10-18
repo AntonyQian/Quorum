@@ -159,3 +159,22 @@ export function filterPoolsByCategory<T extends { product: { category: string } 
   if (!category) return pools;
   return pools.filter((pool) => pool.product.category === category);
 }
+
+export function filterPoolsByBrowseCategory<
+  T extends { product: { category: string; name: string } },
+>(pools: T[], value: string): T[] {
+  if (value === "all") return pools;
+  if (value === "dining") {
+    return pools.filter(
+      (pool) =>
+        pool.product.category === "dining_table" && /dining/i.test(pool.product.name),
+    );
+  }
+  if (value === "tables") {
+    return pools.filter(
+      (pool) =>
+        pool.product.category === "dining_table" && !/dining/i.test(pool.product.name),
+    );
+  }
+  return pools.filter((pool) => pool.product.category === value);
+}

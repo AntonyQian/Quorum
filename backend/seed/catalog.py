@@ -21,6 +21,7 @@ RETAILERS = [
 ]
 
 SHOPPERS = ["Alice", "Bob", "Casey"]
+ADMIN_NAME = "Quorum Admin"
 SIMULATED_SHOPPER_COUNT = 40
 DECLINING_SHOPPER_NAME = "Sim Dana"
 

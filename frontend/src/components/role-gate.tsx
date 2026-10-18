@@ -6,19 +6,30 @@ import { useAccount } from "@/components/account-provider";
 import type { UserRole } from "@/lib/types";
 
 export function homeFor(role: UserRole): string {
-  return role === "retailer" ? "/retailer" : "/";
+  if (role === "retailer") return "/retailer";
+  if (role === "admin") return "/admin";
+  return "/";
 }
 
-/** Renders its children only for `role`; any other signed-in account is sent to its own home. */
-export function RoleGate({ role, children }: { role: UserRole; children: ReactNode }) {
+/** Renders its children only for allowed roles; others are sent to their home. */
+export function RoleGate({
+  role,
+  allow,
+  children,
+}: {
+  role?: UserRole;
+  allow?: UserRole[];
+  children: ReactNode;
+}) {
+  const allowed = allow ?? (role ? [role] : []);
   const { user } = useAccount();
   const router = useRouter();
-  const wrong = user != null && user.role !== role;
+  const wrong = user != null && !allowed.includes(user.role);
 
   useEffect(() => {
     if (wrong && user) router.replace(homeFor(user.role));
   }, [wrong, user, router]);
 
-  if (!user || wrong) return null;
+  if (!user || wrong || allowed.length === 0) return null;
   return <>{children}</>;
 }

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
+from app import config
 from app.db import get_session
 from app.deps import get_pool_or_404
 from app.errors import api_error, not_found
@@ -12,7 +13,12 @@ from app.schemas import PoolDetail
 from app.services import clock, demand, membership, pool_engine, views
 from seed.seed import reset_and_seed
 
-router = APIRouter(prefix="/demo")
+def require_demo_panel() -> None:
+    if not config.DEMO_PANEL_ENABLED:
+        raise not_found()
+
+
+router = APIRouter(prefix="/demo", dependencies=[Depends(require_demo_panel)])
 
 
 class AdvanceBody(BaseModel):

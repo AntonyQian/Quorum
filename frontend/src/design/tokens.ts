@@ -56,7 +56,23 @@ export const filter = {
   pillSelected: "border-foreground bg-foreground text-background",
   pillIdle:
     "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+  select:
+    "h-8 min-w-[9.5rem] max-w-[11rem] appearance-none rounded-full border border-border bg-background bg-[length:1rem] bg-position-[right_0.65rem_center] bg-no-repeat pl-3 pr-9 text-sm font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-0",
 } as const;
+
+/** Fixed category options for the pool grid (value `all` shows every category). */
+export const poolBrowseCategoryOptions = [
+  { value: "all", label: "All" },
+  { value: "seating", label: "Seating" },
+  { value: "bookshelf", label: "Bookshelves" },
+  { value: "sofa", label: "Sofas" },
+  { value: "dining", label: "Dining" },
+  { value: "tables", label: "Tables" },
+  { value: "desk", label: "Desks" },
+  { value: "bedroom", label: "Bedroom" },
+  { value: "storage", label: "Storage" },
+  { value: "lighting", label: "Lighting" },
+] as const;
 
 export const bar = {
   track: "h-2 overflow-hidden rounded-full bg-muted",
@@ -196,7 +212,9 @@ export const poolScopes = {
 };
 
 export function roleLabel(role: UserRole): string {
-  return role === "retailer" ? "Retailer" : "Shopper";
+  if (role === "retailer") return "Retailer";
+  if (role === "admin") return "Admin";
+  return "Shopper";
 }
 
 export function memberCountLabel(count: number): string {
