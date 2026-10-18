@@ -1,14 +1,22 @@
-"""Accounts and shopper endpoints (SPEC §8). Recommend, orders and notifications are still TODO."""
+"""Accounts and shopper endpoints (SPEC §8)."""
 
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.deps import current_user, get_pool_or_404, optional_user
-from app.errors import not_found
+from app.deps import current_user, get_public_pool_or_404, optional_user
+from app.errors import api_error, not_found
 from app.models import Notification, Pool, PoolMember, Product, User
-from app.schemas import NotificationList, Order, PoolDetail, PoolSummary, UserOut
-from app.services import membership, notifications, pool_engine, views
+from app.schemas import (
+    NotificationList,
+    Order,
+    PoolDetail,
+    PoolSummary,
+    RecommendBody,
+    RecommendResponse,
+    UserOut,
+)
+from app.services import membership, notifications, pool_engine, recommender, views
 
 router = APIRouter()
 
@@ -30,29 +38,43 @@ def me(user: User = Depends(current_user)):
 def list_pools(status: str = "open,locked", category: str | None = None, session: Session = Depends(get_session)):
     pool_engine.evaluate_all(session)
     statuses = [s.strip() for s in status.split(",") if s.strip()]
-    query = select(Pool).where(Pool.status.in_(statuses))
+    query = (
+        select(Pool)
+        .join(Product, Product.id == Pool.product_id)
+        .where(Pool.status.in_(statuses), Product.visibility == "public")
+    )
     if category:
-        query = query.join(Product, Product.id == Pool.product_id).where(Product.category == category)
+        query = query.where(Product.category == category)
     return [views.pool_summary(session, p) for p in session.exec(query.order_by(Pool.deadline)).all()]
 
 
 @router.get("/pools/{pool_id}", response_model=PoolDetail)
-def get_pool(viewer: User | None = Depends(optional_user), pool: Pool = Depends(get_pool_or_404),
+def get_pool(viewer: User | None = Depends(optional_user), pool: Pool = Depends(get_public_pool_or_404),
              session: Session = Depends(get_session)):
     pool = pool_engine.evaluate_pool(session, pool)
     return views.pool_detail(session, pool, viewer)
 
 
 @router.post("/pools/{pool_id}/join", response_model=PoolDetail)
-def join_pool(user: User = Depends(current_user), pool: Pool = Depends(get_pool_or_404),
+def join_pool(user: User = Depends(current_user), pool: Pool = Depends(get_public_pool_or_404),
               session: Session = Depends(get_session)):
     return views.pool_detail(session, membership.join(session, pool, user), user)
 
 
 @router.post("/pools/{pool_id}/leave", response_model=PoolDetail)
-def leave_pool(user: User = Depends(current_user), pool: Pool = Depends(get_pool_or_404),
+def leave_pool(user: User = Depends(current_user), pool: Pool = Depends(get_public_pool_or_404),
                session: Session = Depends(get_session)):
     return views.pool_detail(session, membership.leave(session, pool, user), user)
+
+
+@router.post("/recommend", response_model=RecommendResponse)
+def recommend(body: RecommendBody, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    if not body.text.strip():
+        raise api_error(422, "invalid_request", "Describe what you're looking for")
+    try:
+        return recommender.recommend(session, user, body.text)
+    except recommender.RecommenderError as e:
+        raise api_error(502, "recommender_unavailable", f"Recommendations are unavailable right now: {e}")
 
 
 @router.get("/me/orders", response_model=list[Order])

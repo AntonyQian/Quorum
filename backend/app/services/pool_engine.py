@@ -9,6 +9,7 @@ from app.services import clock, payments
 from app.services.notifications import notify, notify_retailer
 
 ACTIVE = ("pending", "charged")
+LIVE = ("open", "locked")  # Pool statuses that still take Members
 
 
 def get_tiers(session: Session, pool: Pool) -> list[Tier]:
@@ -141,6 +142,6 @@ def evaluate_pool(session: Session, pool: Pool, now: datetime | None = None) -> 
 
 def evaluate_all(session: Session, now: datetime | None = None) -> None:
     """Evaluate every open or locked Pool (used after the Sim Clock advances)."""
-    pools = session.exec(select(Pool).where(Pool.status.in_(("open", "locked")))).all()
+    pools = session.exec(select(Pool).where(Pool.status.in_(LIVE))).all()
     for pool in pools:
         evaluate_pool(session, pool, now)

@@ -67,6 +67,18 @@ def seed(session: Session) -> None:
                 session.add(PoolMember(pool_id=pool.id, user_id=sim.id, joined_at=now))
             session.commit()
             pool_engine.evaluate_pool(session, pool, now)
+            # Late joiners on a locked Pool lift it to a higher Tier; settling then issues Tier Refunds.
+            late = sims[1 + pool_spec["fill"] : 1 + pool_spec["fill"] + pool_spec.get("late_fill", 0)]
+            for sim in late:
+                session.add(PoolMember(pool_id=pool.id, user_id=sim.id, joined_at=now))
+            if late:
+                session.commit()
+                pool_engine.evaluate_pool(session, pool, now)
+            if pool_spec.get("settle"):
+                pool.deadline = now - timedelta(hours=1)
+                session.add(pool)
+                session.commit()
+                pool_engine.evaluate_pool(session, pool, now)
 
         if hidden_spec:
             for sim in sims[: hidden_spec["hits"]]:

@@ -8,7 +8,7 @@ This file is the contract between the frontend (Cursor) and the backend (Claude 
 
 ## 1. Concept
 
-- **Shoppers** describe what they want in plain language (a **Wish**). Claude recommends live **Pools** and explains why each one fits.
+- **Shoppers** describe what they want in plain language (a **Wish**). the model recommends live **Pools** and explains why each one fits.
 - A **Pool** has 1–3 **Tiers**, for example "15 people: $200 off each" and "45 people: $250 off each". Shoppers **Join** by saving a card. They are not charged, and they can **Leave** freely.
 - When the first Tier is reached, the Pool **Locks**: every Member is charged at once. More people can still join, and anyone who joins later is charged right away.
 - At the **Deadline** (30 days at most) or when the **Stock Cap** is reached, the Pool settles. Everyone pays the same final price, and anyone who paid more gets an automatic **Tier Refund** for the difference.
@@ -35,8 +35,8 @@ This file is the contract between the frontend (Cursor) and the backend (Claude 
 
 | Var | Where | Example |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | backend | `sk-ant-...` |
-| `CLAUDE_MODEL` | backend | `claude-sonnet-5-5` (use `claude-haiku-5-5` to save credits) |
+| `OPENAI_API_KEY` | backend | `sk-...` |
+| `OPENAI_MODEL` | backend | `gpt-5-nano` |
 | `MOCK_PAYMENTS` | backend | `true` skips Stripe entirely |
 | `STRIPE_SECRET_KEY` | backend | `sk_test_...` (only when `MOCK_PAYMENTS=false`) |
 | `FRONTEND_URL` | backend | `http://localhost:3000` (Stripe redirect target) |
@@ -52,11 +52,11 @@ This file is the contract between the frontend (Cursor) and the backend (Claude 
 - **Errors:** a non-2xx response has the body `{"detail": {"code": "card_required", "message": "..."}}`. Error codes are listed below.
 - **Live updates:** the frontend polls (pool detail and notifications every 3 seconds). There are no websockets.
 
-Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`, `invalid_request`.
+Error codes: `card_required`, `pool_not_joinable`, `already_member`, `not_member`, `cannot_leave_locked`, `stock_cap_reached`, `not_found`, `forbidden`, `invalid_tiers`, `invalid_request`, `recommender_unavailable`.
 
 - A missing, malformed, or unknown `X-User-Id` on an endpoint that needs a user returns 401 `forbidden`. Endpoints that work anonymously (`GET /pools`, `GET /pools/{id}`) treat it as no user.
 - A malformed path, query, or body returns 422 `invalid_request`, and an unknown route returns 404 `not_found`, in the same error body.
-- Retailer products: `invalid_tiers` is 400 (any §4 Validation rule, including the 1–30 day Deadline and a stock cap below 1, and a PATCH whose prices would put a running Pool's Tier below the Floor Price). Other bad product input is 400 `invalid_request`: a Floor Price above the list price, `public` without a `pool`, `hidden` with a `pool`, or a PATCH that makes a Hidden Listing public (use Launch) or hides a Product whose Pool is open or locked. Another retailer's Product or Pool is 404 `not_found`.
+- Retailer products: `invalid_tiers` is 400 (any §4 Validation rule, including the 1–30 day Deadline and a stock cap below 1, and a PATCH whose prices would put a running Pool's Tier below the Floor Price). Other bad product input is 400 `invalid_request`: a List Price of 0 or less or a negative Floor Price, a Floor Price above the List Price, a `demand_threshold` below 1, `public` without a `pool`, `hidden` with a `pool`, or a PATCH that makes a Hidden Listing public (use Launch), hides a Product whose Pool is open or locked, changes the List Price after its Pool has Locked, or sends `demand_threshold` for a public Product; and Launching a Product that isn't hidden. Another retailer's Product or Pool is 404 `not_found`. Shopper endpoints never show a hidden Product: `GET /pools` leaves out its Pools, and `GET /pools/{id}`, `POST /pools/{id}/join` and `POST /pools/{id}/leave` are 404 `not_found`.
 - Join and Leave: `card_required` is 402 (also returned when Joining a locked Pool and the card is declined, in which case the Member becomes `payment_failed` and may Join again with another card; and in Stripe mode for a real shopper whose card was saved in mock mode). `pool_not_joinable`, `already_member`, `stock_cap_reached`, `not_member`, and `cannot_leave_locked` are 409. An unknown Pool is 404 `not_found`. Join checks the Pool before the card, so a user with no saved card gets `pool_not_joinable`, `already_member` or `stock_cap_reached` when one applies, and `card_required` only otherwise. `stock_cap_reached` applies when the stock cap is full but the Pool hasn't settled yet; a locked Pool whose cap is full is completed by `evaluate_pool`, so Joining it is `pool_not_joinable`.
 
 ---
@@ -158,7 +158,7 @@ refund(session, member, amount_cents) -> bool            # from the member's lat
 
 ## 6. AI recommender and demand
 
-`POST /api/recommend` makes **one** Claude call (`CLAUDE_MODEL`, structured JSON output, low effort). The prompt includes:
+`POST /api/recommend` makes **one** LLM call (`OPENAI_MODEL`, structured JSON output, minimal reasoning). The prompt includes:
 - the Wish text
 - a compact JSON list of **public Pools** (id, name, category, style tags, dimensions, current or next price, participants, deadline)
 - a compact JSON list of **Hidden Listings** (id, name, category, style tags, dimensions, floor price), which the shopper never sees
@@ -177,11 +177,11 @@ The backend then:
 1. Saves the Wish (`wishes` table) with `parsed`.
 2. Returns `pool_matches` with `fit_score >= 50`, sorted by score and capped at 6, joined with the Pool summaries.
 3. For each hidden match with `fit_score >= 60` **and** (`budget_max_cents` is null **or** `>= floor_price_cents`), inserts a **Demand Hit** (unique per user and product).
-4. If a Product's hit count has just reached its `demand_threshold`, it notifies the retailer: "23 shoppers want something like *Walnut Dining Table*. Launch a pool?"
+4. When a Product's hit count reaches or passes its `demand_threshold` (also when a PATCH lowers or sets the threshold at or below the current count), it notifies the retailer once per Product (`kind: "demand_threshold"`, `link: "/retailer?product={id}"`): "23 shoppers want something like *Walnut Dining Table*. Launch a pool?"
 
 On **Launch**, every user with a Demand Hit on that Product is notified with a link to the new Pool.
 
-**Stretch:** `POST /api/retailer/products/{id}/suggest-tiers`, where Claude proposes tiers within the Price Band using the demand count.
+**Stretch:** `POST /api/retailer/products/{id}/suggest-tiers`, where the model proposes tiers within the Price Band using the demand count.
 
 ---
 
@@ -270,7 +270,7 @@ type Notification = {
 | GET | `/pools/{id}` | none | `PoolDetail` |
 | POST | `/pools/{id}/join` | none | `PoolDetail`. Errors: `card_required`, `pool_not_joinable`, `already_member`, `stock_cap_reached` |
 | POST | `/pools/{id}/leave` | none | `PoolDetail`. Errors: `cannot_leave_locked`, `not_member` |
-| POST | `/recommend` | `{ text: string }` | `{ wish_id, parsed, recommendations: { pool: PoolSummary, fit_score: number, reason: string }[] }` |
+| POST | `/recommend` | `{ text: string }` | `{ wish_id, parsed, recommendations: { pool: PoolSummary, fit_score: number, reason: string }[] }`. `parsed` is `{ category, budget_max_cents, style_tags, size_notes }` (nulls allowed, `style_tags` may be empty). Errors: 422 `invalid_request` (blank text), 502 `recommender_unavailable` (the model call failed; no Wish saved) |
 | GET | `/me/orders` | none | `Order[]` (see below) |
 | GET | `/me/notifications` | none | `{ unread: number, items: Notification[] }` |
 | POST | `/notifications/{id}/read` | none | `{ ok: true }` |
@@ -299,10 +299,11 @@ type Order = {
 |---|---|---|---|
 | GET | `/retailer/products` | none | `RetailerProduct[]` |
 | POST | `/retailer/products` | `ProductCreate` | `RetailerProduct` |
-| PATCH | `/retailer/products/{id}` | partial `ProductCreate` without `pool` | `RetailerProduct` |
-| POST | `/retailer/products/{id}/launch` | `PoolCreate` | `PoolDetail` (Product becomes public, demand-hit shoppers notified) |
-| GET | `/retailer/products/{id}/demand` | none | `{ total_hits, last_7_days, threshold, recent_wishes: { text, created_at }[] }` |
-| GET | `/retailer/pools/{id}` | none | `PoolDetail & { members: { name, status, charged_cents, refunded_cents, joined_at }[], revenue_cents }` |
+| PATCH | `/retailer/products/{id}` | partial `ProductCreate` without `pool` | `RetailerProduct`. Errors: `invalid_tiers` (new prices break a running Pool's Tiers), `invalid_request` (see §3) |
+| DELETE | `/retailer/products/{id}` | none | `{ ok: true }`. 409 `product_in_use` when any of its Pools has Members |
+| POST | `/retailer/products/{id}/launch` | `PoolCreate` | `PoolDetail` (Product becomes public, demand-hit shoppers notified with `kind: "pool_launched"`). Errors: `invalid_tiers`, `invalid_request` (not hidden) |
+| GET | `/retailer/products/{id}/demand` | none | `{ total_hits, last_7_days, threshold, recent_wishes: { text, created_at }[] }` (`recent_wishes`: up to 10, newest first) |
+| GET | `/retailer/pools/{id}` | none | `PoolDetail & { members: { name, status, charged_cents, refunded_cents, joined_at }[], revenue_cents }` (every Member, including those who left; `revenue_cents` is net: charged minus Tier Refunds) |
 | GET | `/retailer/notifications` | none | the same as `/me/notifications` (alias) |
 
 ```ts
@@ -317,7 +318,7 @@ type ProductCreate = {
   dimensions: string; image_url: string;
   list_price_cents: number; floor_price_cents: number;
   visibility: "hidden" | "public";
-  demand_threshold?: number | null;      // hidden only
+  demand_threshold?: number | null;      // hidden only; >= 1
   pool?: PoolCreate;                     // required when visibility = "public"
 }
 
@@ -337,7 +338,9 @@ type RetailerProduct = ProductCard & {
 | GET | `/demo/clock` | none | `{ now }` |
 | POST | `/demo/clock/advance` | `{ hours?: number, days?: number, to_deadline_of_pool?: number }` | `{ now }`, and it evaluates all open and locked Pools. The clock never goes back: negative `hours` or `days` is 400 `invalid_request`, and a deadline already passed leaves it where it is. Unknown `to_deadline_of_pool` is 404 `not_found` |
 | POST | `/demo/pools/{id}/simulate-joins` | `{ count: number, include_declining_card?: boolean }` | `PoolDetail`. `count` is 0–200 (otherwise 422 `invalid_request`); unknown Pool is 404 `not_found` |
-| POST | `/demo/products/{id}/simulate-demand` | `{ count: number }` | `{ total_hits }` (fake Wishes from simulated shoppers, no Claude call) |
+| POST | `/demo/products/{id}/simulate-demand` | `{ count: number }` | `{ total_hits }` (fake Wishes from simulated shoppers, no LLM call; each simulated shopper hits a Product at most once, so fewer than `count` may be added; reaching the Demand Threshold alerts the retailer with `kind: "demand_threshold"`). `count` is 0–200 (otherwise 422 `invalid_request`); unknown Product is 404 `not_found` |
+| POST | `/demo/pools/{id}/simulate-leaves` | `{ count: number }` | `PoolDetail`. Up to `count` active simulated Members leave an open Pool (newest first); 409 `cannot_leave_locked` if the Pool isn't open |
+| POST | `/demo/products/{id}/remove-demand` | `{ count: number }` | `{ total_hits }` (drops the newest simulated Demand Hits) |
 | POST | `/demo/reset` | none | `{ ok: true }` (drop and reseed) |
 
 ---
@@ -347,7 +350,7 @@ type RetailerProduct = ProductCard & {
 **Global top bar:** the Quorum logo, the account switcher (seeded users), a notification bell with an unread count, a Sim Clock readout, and a "Demo" button that opens the demo panel drawer.
 
 **Shopper**
-- `/`: a large "What are you looking for?" Wish box. When it has results, it shows AI recommendation cards (Pool card plus Claude's reason and a fit badge). Below that is a grid of all open and locked Pools, with category filter chips.
+- `/`: a large "What are you looking for?" Wish box. When it has results, it shows AI recommendation cards (Pool card plus the model's reason and a fit badge). Below that is a grid of all open and locked Pools, with category filter chips.
 - `/pools/[id]`: product image and details, a **tier progress bar** (markers per Tier, filled to the participant count), "Next tier in N people", a countdown, the current price, and the Join or Leave button. When the Pool is locked, the button reads "Join (you'll be charged $X now)". If the user has no card, it starts the card-saving flow first.
 - `/orders`: My Orders, with each order's charges and Tier Refunds as separate lines and a "You saved $X vs list price" summary.
 - `/payment/success`: calls `confirm-setup`, then returns the user to `return_to`.
@@ -376,7 +379,7 @@ type RetailerProduct = ProductCard & {
 ## 11. Demo script (3 minutes)
 
 1. **Retailer (Oak & Co.)** opens Hidden Listings: "Walnut Dining Table" shows **9 of 10** Demand Hits.
-2. **Shopper Alice** types *"walnut dining table for 4, under $800"*. Claude recommends live Pools with reasons, and in the background this Wish becomes the **10th Demand Hit**.
+2. **Shopper Alice** types *"walnut dining table for 4, under $800"*. the model recommends live Pools with reasons, and in the background this Wish becomes the **10th Demand Hit**.
 3. **Retailer** sees the bell alert, then clicks **Launch** with Tiers **10 → $150 off** and **25 → $250 off** and a 14-day deadline.
 4. **Alice** gets "The table you asked about is now a Pool". She joins and saves a card through Stripe test Checkout.
 5. **Demo panel:** simulate 8 joins with a declining card. **Tier 1 is reached, the Pool locks, and everyone is charged at once** (show the Stripe dashboard). The declining card is dropped and notified.
@@ -392,7 +395,7 @@ Closing line: *"Shoppers save by buying together; retailers only launch what peo
 |---|---|---|
 | 0–2 | Next.js + Tailwind scaffold, top bar, account switcher, API client with **mock responses in the §8 shapes** | FastAPI scaffold, models, Sim Clock, seed loader, `GET /users`, `GET /pools`, `GET /pools/{id}` |
 | 2–10 | Pool grid, pool detail with tier progress bar, Join/Leave, card-saving redirect, My Orders | `evaluate_pool` + unit tests, Join/Leave, payments adapter (mock first, then Stripe), orders, retailer product CRUD + Launch |
-| 10–15 | Wish box + recommendation cards, retailer dashboard (both tabs), product form, Launch modal | `/recommend` with Claude, Demand Hits, threshold alerts, demand endpoint, notifications |
+| 10–15 | Wish box + recommendation cards, retailer dashboard (both tabs), product form, Launch modal | `/recommend` with the LLM, Demand Hits, threshold alerts, demand endpoint, notifications |
 | 15–19 | Notification bell, demo panel, switch from mocks to the real API end to end | Demo endpoints, full seed data, fix integration bugs |
 | 19–22 | Polish: loading states, empty states, animations on Lock and refund | Edge cases, Stripe mode run-through, rehearsing the demo flow |
 | 22–24 | Together: rehearse the demo, record a backup video, write the Devpost entry, deploy only if everything is stable (Vercel + Render) |

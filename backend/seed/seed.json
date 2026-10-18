@@ -1,50 +1,702 @@
 {
   "retailers": [
-    {"name": "Oak & Co.", "tagline": "Solid wood, built to last"},
-    {"name": "Nordlund", "tagline": "Modern Scandinavian living"},
-    {"name": "ReLoft", "tagline": "Refurbished furniture, like new"}
+    {
+      "name": "Oak & Co.",
+      "tagline": "Solid wood, built to last"
+    },
+    {
+      "name": "Nordlund",
+      "tagline": "Modern Scandinavian living"
+    },
+    {
+      "name": "ReLoft",
+      "tagline": "Refurbished furniture, like new"
+    }
   ],
   "shoppers": [
-    {"name": "Alice"},
-    {"name": "Bob"}
+    {
+      "name": "Alice"
+    },
+    {
+      "name": "Bob"
+    },
+    {
+      "name": "Casey"
+    }
   ],
   "simulated_shopper_count": 40,
   "declining_shopper_name": "Sim Dana",
   "products": [
     {
-      "retailer": "Oak & Co.", "name": "Solid Oak Bookshelf", "category": "bookshelf",
-      "description": "Five-shelf bookshelf in solid oak.", "style_tags": ["oak", "traditional"],
-      "dimensions": "180 x 90 x 30 cm", "list_price_cents": 89900, "floor_price_cents": 59900,
+      "retailer": "Oak & Co.",
+      "name": "Solid Oak Bookshelf",
+      "category": "bookshelf",
+      "description": "Five-shelf bookshelf in solid oak.",
+      "style_tags": [
+        "oak",
+        "traditional"
+      ],
+      "dimensions": "180 x 90 x 30 cm",
+      "list_price_cents": 89900,
+      "floor_price_cents": 59900,
       "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156",
-      "pool": {"deadline_days": 14, "fill": 6, "tiers": [[8, 10000], [20, 20000]]}
+      "pool": {
+        "deadline_days": 14,
+        "fill": 6,
+        "tiers": [
+          [
+            8,
+            10000
+          ],
+          [
+            20,
+            20000
+          ]
+        ]
+      }
     },
     {
-      "retailer": "Nordlund", "name": "Scandi Sofa", "category": "sofa",
-      "description": "Three-seat sofa in woven grey fabric.", "style_tags": ["scandinavian", "grey"],
-      "dimensions": "210 x 90 x 80 cm", "list_price_cents": 139900, "floor_price_cents": 99900,
+      "retailer": "Nordlund",
+      "name": "Scandi Sofa",
+      "category": "sofa",
+      "description": "Three-seat sofa in woven grey fabric.",
+      "style_tags": [
+        "scandinavian",
+        "grey"
+      ],
+      "dimensions": "210 x 90 x 80 cm",
+      "list_price_cents": 139900,
+      "floor_price_cents": 99900,
       "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc",
-      "pool": {"deadline_days": 21, "fill": 12, "tiers": [[10, 15000], [25, 30000]]}
+      "pool": {
+        "deadline_days": 21,
+        "fill": 12,
+        "tiers": [
+          [
+            10,
+            15000
+          ],
+          [
+            25,
+            30000
+          ]
+        ]
+      }
     },
     {
-      "retailer": "ReLoft", "name": "Refurbished Leather Armchair", "category": "chair",
-      "description": "Mid-century leather armchair, professionally restored.", "style_tags": ["leather", "mid-century"],
-      "dimensions": "75 x 80 x 85 cm", "list_price_cents": 59900, "floor_price_cents": 39900,
+      "retailer": "ReLoft",
+      "name": "Refurbished Leather Armchair",
+      "category": "chair",
+      "description": "Mid-century leather armchair, professionally restored.",
+      "style_tags": [
+        "leather",
+        "mid-century"
+      ],
+      "dimensions": "75 x 80 x 85 cm",
+      "list_price_cents": 59900,
+      "floor_price_cents": 39900,
       "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c",
-      "pool": {"deadline_days": 2, "fill": 3, "tiers": [[5, 8000], [12, 15000]]}
+      "pool": {
+        "deadline_days": 2,
+        "fill": 3,
+        "tiers": [
+          [
+            5,
+            8000
+          ],
+          [
+            12,
+            15000
+          ]
+        ]
+      }
     },
     {
-      "retailer": "Oak & Co.", "name": "Walnut Dining Table", "category": "dining_table",
-      "description": "Solid walnut dining table that seats four to six.", "style_tags": ["walnut", "mid-century"],
-      "dimensions": "150 x 85 x 75 cm", "list_price_cents": 89900, "floor_price_cents": 59900,
+      "retailer": "Oak & Co.",
+      "name": "Walnut Dining Table",
+      "category": "dining_table",
+      "description": "Solid walnut dining table that seats four to six.",
+      "style_tags": [
+        "walnut",
+        "mid-century"
+      ],
+      "dimensions": "150 x 85 x 75 cm",
+      "list_price_cents": 89900,
+      "floor_price_cents": 59900,
       "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200",
-      "hidden": {"demand_threshold": 10, "hits": 9}
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 9
+      }
     },
     {
-      "retailer": "Nordlund", "name": "Birch Writing Desk", "category": "desk",
-      "description": "Compact birch desk with a cable drawer.", "style_tags": ["birch", "minimal"],
-      "dimensions": "120 x 60 x 74 cm", "list_price_cents": 69900, "floor_price_cents": 49900,
+      "retailer": "Nordlund",
+      "name": "Birch Writing Desk",
+      "category": "desk",
+      "description": "Compact birch desk with a cable drawer.",
+      "style_tags": [
+        "birch",
+        "minimal"
+      ],
+      "dimensions": "120 x 60 x 74 cm",
+      "list_price_cents": 69900,
+      "floor_price_cents": 49900,
       "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd",
-      "hidden": {"demand_threshold": 8, "hits": 3}
+      "hidden": {
+        "demand_threshold": 8,
+        "hits": 3
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Farmhouse Dining Table",
+      "category": "dining_table",
+      "description": "Reclaimed oak table for eight.",
+      "style_tags": [
+        "oak",
+        "farmhouse"
+      ],
+      "dimensions": "220 x 95 x 76 cm",
+      "list_price_cents": 119900,
+      "floor_price_cents": 79900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 10,
+        "fill": 8,
+        "tiers": [
+          [
+            10,
+            12000
+          ],
+          [
+            20,
+            24000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Linen Loveseat",
+      "category": "sofa",
+      "description": "Compact two-seat linen sofa.",
+      "style_tags": [
+        "scandinavian",
+        "linen"
+      ],
+      "dimensions": "160 x 85 x 80 cm",
+      "list_price_cents": 84900,
+      "floor_price_cents": 59900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 12,
+        "fill": 4,
+        "tiers": [
+          [
+            6,
+            8000
+          ],
+          [
+            15,
+            16000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Restored Teak Desk",
+      "category": "desk",
+      "description": "Danish teak desk, restored.",
+      "style_tags": [
+        "teak",
+        "mid-century"
+      ],
+      "dimensions": "140 x 70 x 75 cm",
+      "list_price_cents": 64900,
+      "floor_price_cents": 44900,
+      "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 9,
+        "fill": 2,
+        "tiers": [
+          [
+            4,
+            7000
+          ],
+          [
+            10,
+            14000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Oak Media Console",
+      "category": "storage",
+      "description": "Low oak console with sliding doors.",
+      "style_tags": [
+        "oak",
+        "modern"
+      ],
+      "dimensions": "170 x 40 x 55 cm",
+      "list_price_cents": 74900,
+      "floor_price_cents": 50900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 15,
+        "fill": 9,
+        "tiers": [
+          [
+            8,
+            9000
+          ],
+          [
+            16,
+            18000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Birch Dining Chair Set",
+      "category": "chair",
+      "description": "Set of four birch chairs.",
+      "style_tags": [
+        "birch",
+        "minimal"
+      ],
+      "dimensions": "45 x 50 x 82 cm",
+      "list_price_cents": 49900,
+      "floor_price_cents": 32900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 1,
+        "fill": 1,
+        "tiers": [
+          [
+            5,
+            6000
+          ],
+          [
+            12,
+            12000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Vintage Floor Lamp",
+      "category": "lighting",
+      "description": "Brass arc floor lamp, rewired.",
+      "style_tags": [
+        "brass",
+        "vintage"
+      ],
+      "dimensions": "40 x 40 x 190 cm",
+      "list_price_cents": 22900,
+      "floor_price_cents": 14900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 18,
+        "fill": 5,
+        "tiers": [
+          [
+            6,
+            3000
+          ],
+          [
+            14,
+            6000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Maple Bed Frame",
+      "category": "bedroom",
+      "description": "Queen maple platform bed.",
+      "style_tags": [
+        "maple",
+        "modern"
+      ],
+      "dimensions": "210 x 160 x 95 cm",
+      "list_price_cents": 99900,
+      "floor_price_cents": 69900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 20,
+        "fill": 10,
+        "tiers": [
+          [
+            8,
+            10000
+          ],
+          [
+            18,
+            20000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Wool Lounge Chair",
+      "category": "seating",
+      "description": "Boucle wool lounge chair.",
+      "style_tags": [
+        "scandinavian",
+        "wool"
+      ],
+      "dimensions": "80 x 78 x 78 cm",
+      "list_price_cents": 54900,
+      "floor_price_cents": 37900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 7,
+        "fill": 14,
+        "tiers": [
+          [
+            5,
+            6000
+          ],
+          [
+            12,
+            12000
+          ],
+          [
+            25,
+            20000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Refurbished Bookcase",
+      "category": "bookshelf",
+      "description": "Painted pine bookcase.",
+      "style_tags": [
+        "pine",
+        "rustic"
+      ],
+      "dimensions": "90 x 30 x 180 cm",
+      "list_price_cents": 34900,
+      "floor_price_cents": 21900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 11,
+        "fill": 3,
+        "tiers": [
+          [
+            5,
+            4000
+          ],
+          [
+            10,
+            8000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Walnut Side Table",
+      "category": "storage",
+      "description": "Round walnut side table.",
+      "style_tags": [
+        "walnut",
+        "mid-century"
+      ],
+      "dimensions": "50 x 50 x 55 cm",
+      "list_price_cents": 29900,
+      "floor_price_cents": 19900,
+      "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 13,
+        "fill": 7,
+        "tiers": [
+          [
+            6,
+            3500
+          ],
+          [
+            15,
+            7000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Grey Corner Sofa",
+      "category": "sofa",
+      "description": "L-shaped sectional in grey.",
+      "style_tags": [
+        "grey",
+        "modern"
+      ],
+      "dimensions": "280 x 180 x 85 cm",
+      "list_price_cents": 189900,
+      "floor_price_cents": 129900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 25,
+        "fill": 11,
+        "tiers": [
+          [
+            10,
+            20000
+          ],
+          [
+            25,
+            40000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Leather Chesterfield",
+      "category": "sofa",
+      "description": "Restored two-seat Chesterfield.",
+      "style_tags": [
+        "leather",
+        "classic"
+      ],
+      "dimensions": "170 x 85 x 75 cm",
+      "list_price_cents": 119900,
+      "floor_price_cents": 79900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 5,
+        "fill": 6,
+        "tiers": [
+          [
+            5,
+            10000
+          ],
+          [
+            12,
+            20000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Oak Writing Bureau",
+      "category": "desk",
+      "description": "Oak bureau with fold-down desk.",
+      "style_tags": [
+        "oak",
+        "traditional"
+      ],
+      "dimensions": "90 x 45 x 110 cm",
+      "list_price_cents": 79900,
+      "floor_price_cents": 54900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 3,
+        "fill": 5,
+        "late_fill": 8,
+        "settle": true,
+        "tiers": [
+          [
+            5,
+            8000
+          ],
+          [
+            12,
+            16000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Pine Bunk Bed",
+      "category": "bedroom",
+      "description": "Twin pine bunk bed.",
+      "style_tags": [
+        "pine",
+        "kids"
+      ],
+      "dimensions": "200 x 100 x 160 cm",
+      "list_price_cents": 69900,
+      "floor_price_cents": 47900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156?auto=format&fit=crop&w=900&q=80",
+      "pool": {
+        "deadline_days": 17,
+        "fill": 2,
+        "tiers": [
+          [
+            4,
+            6000
+          ],
+          [
+            10,
+            12000
+          ]
+        ]
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Oak Wardrobe",
+      "category": "bedroom",
+      "description": "Oak Wardrobe, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 0
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Birch Bookshelf",
+      "category": "bookshelf",
+      "description": "Birch Bookshelf, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 2
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Retro Sideboard",
+      "category": "storage",
+      "description": "Retro Sideboard, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 5
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Ash Coffee Table",
+      "category": "dining_table",
+      "description": "Ash Coffee Table, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 1
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Felt Pendant Light",
+      "category": "lighting",
+      "description": "Felt Pendant Light, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 0
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Rattan Armchair",
+      "category": "seating",
+      "description": "Rattan Armchair, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1594620302200-9a762244a156?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 4
+      }
+    },
+    {
+      "retailer": "Oak & Co.",
+      "name": "Cedar Chest",
+      "category": "storage",
+      "description": "Cedar Chest, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 6
+      }
+    },
+    {
+      "retailer": "Nordlund",
+      "name": "Oak Standing Desk",
+      "category": "desk",
+      "description": "Oak Standing Desk, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 7
+      }
+    },
+    {
+      "retailer": "ReLoft",
+      "name": "Velvet Sofa",
+      "category": "sofa",
+      "description": "Velvet Sofa, made to order once enough people want it.",
+      "style_tags": [
+        "modern"
+      ],
+      "dimensions": "varies",
+      "list_price_cents": 79900,
+      "floor_price_cents": 52900,
+      "image_url": "https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=900&q=80",
+      "hidden": {
+        "demand_threshold": 10,
+        "hits": 3
+      }
     }
   ]
 }

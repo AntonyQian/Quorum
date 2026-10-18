@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from sqlmodel import Session, select
 
-from app.models import DemandHit, Payment, Pool, PoolMember, Product, Retailer, User
+from app.models import DemandHit, Payment, Pool, PoolMember, Product, Retailer, User, Wish
 from app.schemas import (
     DemandSummary,
     MyMembership,
@@ -13,8 +13,10 @@ from app.schemas import (
     NextTier,
     PoolDetail,
     PoolSummary,
+    ProductDemand,
     ProductCard,
     ProductDetailCard,
+    RecentWish,
     RetailerPoolDetail,
     RetailerPoolMember,
     RetailerProduct,
@@ -142,6 +144,27 @@ def demand_summary(session: Session, product: Product) -> DemandSummary:
         last_7_days=sum(1 for h in hits if h.created_at >= week_ago),
         threshold=product.demand_threshold,
         threshold_reached=product.demand_threshold is not None and total >= product.demand_threshold,
+    )
+
+
+RECENT_WISHES = 10
+
+
+def product_demand(session: Session, product: Product) -> ProductDemand:
+    """Demand stats plus the Wishes behind the most recent Demand Hits, newest first."""
+    summary = demand_summary(session, product)
+    wishes = session.exec(
+        select(Wish)
+        .join(DemandHit, DemandHit.wish_id == Wish.id)
+        .where(DemandHit.product_id == product.id)
+        .order_by(DemandHit.created_at.desc(), DemandHit.id.desc())
+        .limit(RECENT_WISHES)
+    ).all()
+    return ProductDemand(
+        total_hits=summary.total_hits,
+        last_7_days=summary.last_7_days,
+        threshold=summary.threshold,
+        recent_wishes=[RecentWish(text=w.text, created_at=clock.iso(w.created_at)) for w in wishes],
     )
 
 

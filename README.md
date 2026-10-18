@@ -8,7 +8,7 @@ We built it for furniture first because that's where the math works. Nobody gets
 
 ## Finding a Pool
 
-You don't browse categories. You type what you want into one box ("something for a small apartment, under $800, I like mid-century") and Claude reads it, picks the live Pools that fit, and tells you why in a sentence: the wood, how many it seats, what it will cost if it locks, how many people it still needs.
+You don't browse categories. You type what you want into one box ("something for a small apartment, under $800, I like mid-century") and an LLM reads it, picks the live Pools that fit, and tells you why in a sentence: the wood, how many it seats, what it will cost if it locks, how many people it still needs.
 
 ## The retailer side
 

@@ -1,4 +1,4 @@
-"""Demo panel endpoints (SPEC §8). Clock and simulate-joins; simulate-demand and reset are TODO."""
+"""Demo panel endpoints (SPEC §8). Clock, simulate-joins and simulate-demand; reset is TODO."""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -6,10 +6,11 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.deps import get_pool_or_404
-from app.errors import api_error
-from app.models import Pool
+from app.errors import api_error, not_found
+from app.models import Pool, Product
 from app.schemas import PoolDetail
-from app.services import clock, membership, pool_engine, views
+from app.services import clock, demand, membership, pool_engine, views
+from seed.seed import reset_and_seed
 
 router = APIRouter(prefix="/demo")
 
@@ -23,6 +24,10 @@ class AdvanceBody(BaseModel):
 class SimulateJoinsBody(BaseModel):
     count: int = Field(ge=0, le=200)
     include_declining_card: bool = False
+
+
+class SimulateDemandBody(BaseModel):
+    count: int = Field(ge=0, le=200)
 
 
 @router.get("/clock")
@@ -47,3 +52,34 @@ def simulate_joins(body: SimulateJoinsBody, pool: Pool = Depends(get_pool_or_404
                    session: Session = Depends(get_session)):
     pool = membership.simulate_joins(session, pool, body.count, body.include_declining_card)
     return views.pool_detail(session, pool, None)
+
+
+@router.post("/products/{product_id}/simulate-demand")
+def simulate_demand(product_id: int, body: SimulateDemandBody, session: Session = Depends(get_session)):
+    product = session.get(Product, product_id)
+    if product is None:
+        raise not_found("Product")
+    return {"total_hits": demand.simulate_demand(session, product, body.count)}
+
+
+@router.post("/pools/{pool_id}/simulate-leaves", response_model=PoolDetail)
+def simulate_leaves(body: SimulateDemandBody, pool: Pool = Depends(get_pool_or_404),
+                    session: Session = Depends(get_session)):
+    pool = membership.simulate_leaves(session, pool, body.count)
+    return views.pool_detail(session, pool, None)
+
+
+@router.post("/products/{product_id}/remove-demand")
+def remove_demand(product_id: int, body: SimulateDemandBody, session: Session = Depends(get_session)):
+    product = session.get(Product, product_id)
+    if product is None:
+        raise not_found("Product")
+    return {"total_hits": demand.remove_demand(session, product, body.count)}
+
+
+@router.post("/reset")
+def reset(session: Session = Depends(get_session)):
+    bind = session.get_bind()
+    session.close()
+    reset_and_seed(bind)
+    return {"ok": True}

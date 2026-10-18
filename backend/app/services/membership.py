@@ -11,7 +11,6 @@ from app.errors import api_error
 from app.models import Pool, PoolMember, User
 from app.services import clock, payments, pool_engine
 
-JOINABLE = ("open", "locked")
 SIMULATED_NAME = "Simulated Shopper"
 
 
@@ -32,13 +31,13 @@ def _find_member(session: Session, pool: Pool, user: User) -> PoolMember | None:
 def join(session: Session, pool: Pool, user: User) -> Pool:
     """Make `user` a pending Member of `pool`, reusing their old row if they left or their card failed."""
     pool = pool_engine.evaluate_pool(session, pool)  # catch up on a passed deadline first
-    if pool.status not in JOINABLE:
+    if pool.status not in pool_engine.LIVE:
         raise api_error(409, "pool_not_joinable", f"This Pool is {pool.status} and can't be joined")
     member = _find_member(session, pool, user)
     if member is not None and member.status in pool_engine.ACTIVE:
         raise api_error(409, "already_member", "You're already in this Pool")
     if pool.stock_cap and pool_engine.active_count(session, pool) >= pool.stock_cap:
-        raise api_error(409, "stock_cap_reached", "This Pool has reached its stock cap")
+        raise api_error(409, "stock_cap_reached", "This Pool has reached its Stock Cap")
     if not payments.has_usable_card(user):
         raise api_error(402, "card_required", "Save a card before joining a Pool")
 
@@ -119,3 +118,20 @@ def _last_simulated_number(session: Session) -> int:
     names = session.exec(select(User.name).where(User.name.startswith(f"{SIMULATED_NAME} "))).all()
     numbers = [int(n.rsplit(" ", 1)[1]) for n in names if n.rsplit(" ", 1)[1].isdigit()]
     return max(numbers, default=0)
+
+
+def simulate_leaves(session: Session, pool: Pool, count: int) -> Pool:
+    """Demo panel: up to `count` active Simulated Members leave an open Pool (newest first). Locked Pools can't be left."""
+    pool = pool_engine.evaluate_pool(session, pool)
+    if pool.status != "open":
+        raise api_error(409, "cannot_leave_locked", f"This Pool is {pool.status}, so its Members can't leave")
+    members = session.exec(
+        select(PoolMember).join(User, User.id == PoolMember.user_id)
+        .where(PoolMember.pool_id == pool.id, PoolMember.status.in_(pool_engine.ACTIVE), User.is_simulated == True)  # noqa: E712
+        .order_by(PoolMember.joined_at.desc(), PoolMember.id.desc()).limit(count)
+    ).all()
+    for member in members:
+        member.status = "left"
+        session.add(member)
+    session.commit()
+    return pool_engine.evaluate_pool(session, pool)

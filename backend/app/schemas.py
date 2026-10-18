@@ -172,8 +172,43 @@ class DemandSummary(BaseModel):
     threshold_reached: bool
 
 
+class RecentWish(BaseModel):
+    text: str
+    created_at: str
+
+
+class ProductDemand(BaseModel):
+    total_hits: int
+    last_7_days: int
+    threshold: int | None
+    recent_wishes: list[RecentWish]
+
+
 class RetailerProduct(ProductCard):
     visibility: Literal["hidden", "public"]
     floor_price_cents: int
     demand: DemandSummary | None
     pool: PoolSummary | None
+
+
+class RecommendBody(BaseModel):
+    text: str
+
+
+class ParsedWishOut(BaseModel):
+    category: str | None
+    budget_max_cents: int | None
+    style_tags: list[str]
+    size_notes: str | None
+
+
+class Recommendation(BaseModel):
+    pool: PoolSummary
+    fit_score: int
+    reason: str
+
+
+class RecommendResponse(BaseModel):
+    wish_id: int
+    parsed: ParsedWishOut
+    recommendations: list[Recommendation]

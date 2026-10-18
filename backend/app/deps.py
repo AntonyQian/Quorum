@@ -3,7 +3,7 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.errors import api_error, forbidden, not_found
-from app.models import Pool, User
+from app.models import Pool, Product, User
 
 
 def optional_user(
@@ -32,5 +32,12 @@ def get_pool_or_404(pool_id: int, session: Session = Depends(get_session)) -> Po
     """The Pool named by the `pool_id` path parameter, or 404 `not_found`."""
     pool = session.get(Pool, pool_id)
     if pool is None:
+        raise not_found("Pool")
+    return pool
+
+
+def get_public_pool_or_404(pool: Pool = Depends(get_pool_or_404), session: Session = Depends(get_session)) -> Pool:
+    """Like `get_pool_or_404`, but a Pool on a hidden Product is 404 too: shoppers never see a Hidden Listing."""
+    if session.get(Product, pool.product_id).visibility != "public":
         raise not_found("Pool")
     return pool

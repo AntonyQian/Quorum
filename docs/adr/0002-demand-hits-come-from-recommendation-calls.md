@@ -1,6 +1,6 @@
 # Demand Hits are a byproduct of the recommendation call
 
-Retailers need to know whether a Hidden Listing would sell before launching it. Instead of a separate demand-sensing pipeline, the same Claude call that ranks public Pools for a Shopper's Wish also scores Hidden Listings; a match whose Shopper budget reaches the Floor Price is stored as a Demand Hit (at most one per Shopper per Product). Hidden Listing matches are never returned to the Shopper.
+Retailers need to know whether a Hidden Listing would sell before launching it. Instead of a separate demand-sensing pipeline, the same LLM call that ranks public Pools for a Shopper's Wish also scores Hidden Listings; a match whose Shopper budget reaches the Floor Price is stored as a Demand Hit (at most one per Shopper per Product). Hidden Listing matches are never returned to the Shopper.
 
 ## Considered Options
 
