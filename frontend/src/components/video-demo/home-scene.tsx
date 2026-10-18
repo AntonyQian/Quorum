@@ -8,34 +8,6 @@ import Link from "next/link";
 import type { RecommendResponse } from "@/lib/types";
 import { cn } from "cn";
 
-function formatBudget(cents: number | null): string | null {
-  if (cents == null) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
-}
-
-function ParsedSummary({ parsed }: { parsed: RecommendResponse["parsed"] }) {
-  const budget = formatBudget(parsed.budget_max_cents);
-  const parts = [
-    parsed.category?.replace(/_/g, " "),
-    budget ? `under ${budget}` : null,
-    parsed.size_notes || null,
-    parsed.style_tags.length ? parsed.style_tags.join(", ") : null,
-  ].filter(Boolean);
-
-  if (parts.length === 0) return null;
-
-  return (
-    <p className={typeScale.meta}>
-      Your specs:{" "}
-      <span className="font-medium text-foreground">{parts.join(" · ")}</span>
-    </p>
-  );
-}
-
 function SearchSkeleton() {
   return (
     <div className="flex flex-col gap-4" aria-hidden>
@@ -127,8 +99,6 @@ export function VideoDemoHomeScene({
                 <p className={typeScale.meta} aria-live="polite">
                   Matching live Pools to your Wish…
                 </p>
-              ) : result ? (
-                <ParsedSummary parsed={result.parsed} />
               ) : null}
             </div>
 
@@ -148,7 +118,7 @@ export function VideoDemoHomeScene({
                 ) : (
                   <div className={memberPanel.box}>
                     <h3 className={typeScale.title}>
-                      We didn&apos;t find live Pools under your specs
+                      We didn&apos;t find live Pools for this search
                     </h3>
                     <p className={typeScale.meta}>
                       Nothing on Quorum right now fits every constraint you gave. We

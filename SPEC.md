@@ -183,6 +183,8 @@ The backend then:
 
 On **Launch**, every user with a Demand Hit on that Product is notified with a link to the new Pool.
 
+**Wish alerts:** whenever a Pool opens (a public Product is created with a Pool, or a Hidden Listing is Launched), each real Shopper whose earlier Wish fits it is notified once (`kind: "wish_pool_opened"`, `link: "/pools/{id}"`), e.g. "A Pool opened for your Wish: Walnut Dining Table". A Wish fits when it names a category or a material/color, the Product matches both, and `budget_max_cents` (if any) is at or above the Pool's best Tier price. Shoppers who already got the Launch notification for that Product are skipped.
+
 **Stretch:** `POST /api/retailer/products/{id}/suggest-tiers`, where the model proposes tiers within the Price Band using the demand count.
 
 ---

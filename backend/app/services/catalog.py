@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.errors import api_error, not_found
 from app.models import DemandHit, Pool, PoolMember, Product, Tier, User
 from app.schemas import PoolCreate, ProductCreate, ProductUpdate
-from app.services import clock, demand, notifications, pool_engine, views
+from app.services import clock, demand, notifications, pool_engine, views, wish_alerts
 
 MAX_DEADLINE_DAYS = 30
 
@@ -86,7 +86,8 @@ def create_product(session: Session, retailer: User, body: ProductCreate) -> Pro
     session.add(product)
     session.flush()
     if body.pool is not None:
-        open_pool(session, product, body.pool)
+        pool = open_pool(session, product, body.pool)
+        wish_alerts.notify_matching_wishes(session, pool, product)
     session.commit()
     session.refresh(product)
     return product
@@ -173,6 +174,8 @@ def launch(session: Session, product: Product, spec: PoolCreate) -> Pool:
         notifications.notify(session, user_id, "pool_launched", f"The {product.name} you asked about is now a Pool",
                              "Something you wished for just launched. Join to unlock the group price.",
                              link=f"/pools/{pool.id}")
+    session.flush()
+    wish_alerts.notify_matching_wishes(session, pool, product)
     session.commit()
     session.refresh(pool)
     return pool
