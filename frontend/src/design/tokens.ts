@@ -43,6 +43,21 @@ export const chip = {
   idle: "bg-secondary text-secondary-foreground hover:bg-accent",
 } as const;
 
+/** Pool filters: a segmented Live/Settled switch and quiet, outlined category pills. */
+export const filter = {
+  segmented: "inline-flex w-fit items-center gap-0.5 rounded-full bg-secondary p-0.5",
+  segment:
+    "inline-flex h-7 items-center rounded-full px-3.5 text-sm font-medium transition-colors",
+  segmentSelected: "bg-background text-foreground shadow-sm",
+  segmentIdle: "text-muted-foreground hover:text-foreground",
+  scroller:
+    "-mx-3 flex items-center gap-1.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+  pill: "inline-flex h-7 shrink-0 items-center rounded-full border px-3 text-[0.8rem] font-medium transition-colors",
+  pillSelected: "border-foreground bg-foreground text-background",
+  pillIdle:
+    "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+} as const;
+
 export const bar = {
   track: "h-2 overflow-hidden rounded-full bg-muted",
   fill: "h-full rounded-full bg-primary",
@@ -159,6 +174,7 @@ export const categories = [
   { id: "dining_table", label: "Dining" },
   { id: "sofa", label: "Sofas" },
   { id: "seating", label: "Seating" },
+  { id: "table", label: "Tables" },
   { id: "chair", label: "Chairs" },
   { id: "desk", label: "Desks" },
   { id: "bookshelf", label: "Bookshelves" },

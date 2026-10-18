@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAccount } from "@/components/account-provider";
 import {
   categoryLabel,
-  chip,
+  filter,
   layout,
   poolScopes,
   skeleton,
@@ -72,14 +72,14 @@ export function PoolBrowser() {
             The price drops when more Members join.
           </p>
         </div>
-        <div className={layout.cluster}>
+        <div className={filter.segmented} role="group" aria-label="Pool status">
           {(Object.keys(poolScopes) as Scope[]).map((key) => (
             <button
               key={key}
               type="button"
               className={cn(
-                chip.base,
-                scope === key ? chip.selected : chip.idle,
+                filter.segment,
+                scope === key ? filter.segmentSelected : filter.segmentIdle,
               )}
               aria-pressed={scope === key}
               onClick={() => {

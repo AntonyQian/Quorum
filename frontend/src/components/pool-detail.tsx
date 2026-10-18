@@ -6,15 +6,12 @@ import Link from "next/link";
 import { DiscountOffer } from "@/components/discount-offer";
 import { JoinPanel } from "@/components/join-panel";
 import { StatusBadge } from "@/components/status-badge";
-import { TierProgressBar } from "@/components/tier-progress-bar";
 import { useAccount } from "@/components/account-provider";
 import {
   MOMENT_MS,
   POLL_INTERVAL_MS,
-  layout,
   momentRest,
   poolMoment,
-  poolStatus,
   skeleton,
   textLink,
   typeScale,
@@ -104,56 +101,59 @@ export function PoolDetailView({ poolId }: { poolId: number }) {
   const activeMoment = momentStatus ? poolMoment[momentStatus] : undefined;
 
   return (
-    <article className={layout.stack}>
+    <article className="flex flex-col gap-6">
       <Link href="/" className={textLink}>
         All Pools
       </Link>
-      <div className="relative aspect-video overflow-hidden rounded-xl bg-muted">
-        <Image
-          src={pool.product.image_url}
-          alt={pool.product.name}
-          fill
-          priority
-          sizes="(min-width: 1152px) 1152px, 100vw"
-          className="object-cover"
-        />
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start lg:gap-12">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-muted lg:sticky lg:top-16 lg:aspect-square">
+          <Image
+            src={pool.product.image_url}
+            alt={pool.product.name}
+            fill
+            priority
+            sizes="(min-width: 1024px) 560px, 100vw"
+            className="object-cover"
+          />
+        </div>
+        <div className="flex flex-col gap-6">
+          <header className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <StatusBadge status={pool.status} />
+              <p className={typeScale.meta}>{pool.product.retailer_name}</p>
+            </div>
+            <h1 className={typeScale.display}>{pool.product.name}</h1>
+            <p className="text-base leading-relaxed text-muted-foreground">
+              {pool.product.description}
+            </p>
+            <p className={typeScale.meta}>{pool.product.dimensions}</p>
+          </header>
+          {activeMoment ? (
+            <p key={momentStatus} role="status" className={activeMoment.banner}>
+              {activeMoment.text}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-4 border-t border-border pt-6">
+            <div className={activeMoment?.ring ?? momentRest}>
+              <DiscountOffer pool={pool} />
+            </div>
+            {pool.final_price_cents != null ? (
+              <p className={typeScale.meta}>
+                Final price {formatCents(pool.final_price_cents)}
+              </p>
+            ) : null}
+            {settled ? null : (
+              <p className={typeScale.meta}>
+                <span className="font-medium text-foreground tabular-nums">
+                  {timeLabel(pool.time_left_seconds)}
+                </span>
+                {ended ? "" : " until the Deadline"}
+              </p>
+            )}
+          </div>
+          <JoinPanel pool={pool} onChange={setPool} />
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <StatusBadge status={pool.status} />
-        <p className={typeScale.meta}>{pool.product.retailer_name}</p>
-      </div>
-      <header className="flex flex-col gap-2">
-        <h1 className={typeScale.display}>{pool.product.name}</h1>
-        <p className={typeScale.meta}>{pool.product.description}</p>
-        <p className={typeScale.meta}>{pool.product.dimensions}</p>
-      </header>
-      {activeMoment ? (
-        <p key={momentStatus} role="status" className={activeMoment.banner}>
-          {activeMoment.text}
-        </p>
-      ) : null}
-      <div className={activeMoment?.ring ?? momentRest}>
-        <DiscountOffer pool={pool} />
-      </div>
-      {pool.final_price_cents != null ? (
-        <p className={typeScale.meta}>
-          Final price {formatCents(pool.final_price_cents)}
-        </p>
-      ) : null}
-      <JoinPanel pool={pool} onChange={setPool} />
-      <section>
-        <h2 className={typeScale.eyebrow}>Tiers</h2>
-        <TierProgressBar pool={pool} />
-        <p className={typeScale.meta}>{poolStatus[pool.status].note}</p>
-      </section>
-      {settled ? null : (
-        <section className="flex flex-col gap-1">
-          <h2 className={typeScale.eyebrow}>{ended ? "Deadline" : "Time left"}</h2>
-          <p className={`${typeScale.display} tabular-nums`}>
-            {timeLabel(pool.time_left_seconds)}
-          </p>
-        </section>
-      )}
     </article>
   );
 }

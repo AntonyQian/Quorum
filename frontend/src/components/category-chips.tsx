@@ -1,6 +1,6 @@
 "use client";
 
-import { chip, layout } from "@/design/tokens";
+import { filter } from "@/design/tokens";
 import { cn } from "cn";
 
 export function CategoryChips({
@@ -13,10 +13,10 @@ export function CategoryChips({
   onSelect: (category: string | null) => void;
 }) {
   return (
-    <div className={layout.cluster} role="toolbar" aria-label="Categories">
+    <div className={filter.scroller} role="toolbar" aria-label="Categories">
       <button
         type="button"
-        className={cn(chip.base, selected == null ? chip.selected : chip.idle)}
+        className={cn(filter.pill, selected == null ? filter.pillSelected : filter.pillIdle)}
         aria-pressed={selected == null}
         onClick={() => onSelect(null)}
       >
@@ -27,8 +27,8 @@ export function CategoryChips({
           key={category.id}
           type="button"
           className={cn(
-            chip.base,
-            selected === category.id ? chip.selected : chip.idle,
+            filter.pill,
+            selected === category.id ? filter.pillSelected : filter.pillIdle,
           )}
           aria-pressed={selected === category.id}
           onClick={() => onSelect(category.id)}

@@ -1,12 +1,9 @@
-"""Load seed.json into a fresh database: python -m seed.seed
+"""Load the hard-coded catalog (seed/catalog.py) into a fresh database: python -m seed.seed
 
-This is the starter seed. SPEC §10 asks for ~25 products and richer pool states (a completed pool with
-refunds, more hidden listings); extend seed.json as the demo needs them.
+Edit catalog.py to change what the demo starts with; nothing here is generated at random.
 """
 
-import json
 from datetime import timedelta
-from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlmodel import Session, select
@@ -14,40 +11,37 @@ from sqlmodel import Session, select
 from app.db import drop_db, engine, init_db
 from app.models import DemandHit, Pool, PoolMember, Product, Retailer, Tier, User, Wish
 from app.services import clock, payments, pool_engine
-from seed.images import image_for
+from seed import catalog
 
-SEED_FILE = Path(__file__).with_name("seed.json")
 CARD = payments.WORKING_CARD_LABEL
 
 
 def seed(session: Session) -> None:
-    data = json.loads(SEED_FILE.read_text(encoding="utf-8"))
     now = clock.set_now(session, clock.DEFAULT_START)
 
     retailers: dict[str, Retailer] = {}
-    for r in data["retailers"]:
+    for r in catalog.RETAILERS:
         retailer = Retailer(**r)
         session.add(retailer)
         session.commit()
         retailers[r["name"]] = retailer
         session.add(User(name=f"{r['name']} Admin", role="retailer", retailer_id=retailer.id))
 
-    for s in data["shoppers"]:
-        session.add(User(name=s["name"], role="shopper"))  # no saved card: demo the card flow
+    for name in catalog.SHOPPERS:
+        session.add(User(name=name, role="shopper"))  # no saved card: demo the card flow
 
     sims: list[User] = []
-    for i in range(1, data["simulated_shopper_count"] + 1):
+    for i in range(1, catalog.SIMULATED_SHOPPER_COUNT + 1):
         sim = User(name=f"Sim Shopper {i}", role="shopper", is_simulated=True, card_label=CARD)
         session.add(sim)
         sims.append(sim)
-    sims[0].name = data["declining_shopper_name"]
+    sims[0].name = catalog.DECLINING_SHOPPER_NAME
     sims[0].card_declines = True
     session.commit()
 
-    for p in data["products"]:
+    for p in catalog.PRODUCTS:
         pool_spec, hidden_spec = p.get("pool"), p.get("hidden")
         fields = {k: v for k, v in p.items() if k not in ("retailer", "pool", "hidden")}
-        fields["image_url"] = image_for(fields["name"], fields["category"])
         product = Product(
             retailer_id=retailers[p["retailer"]].id,
             visibility="public" if pool_spec else "hidden",

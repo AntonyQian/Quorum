@@ -365,12 +365,12 @@ type RetailerProduct = ProductCard & {
 
 ---
 
-## 10. Seed data (`backend/seed/seed.json`)
+## 10. Seed data (`backend/seed/catalog.py`)
 
 - **Retailers:** Oak & Co. (solid wood), Nordlund (modern Scandinavian), ReLoft (refurbished).
 - **Accounts:** shoppers Alice and Bob (no saved card, so the card-saving flow can be shown), and one retailer login per retailer.
 - **About 40 Simulated Shoppers**, all with cards saved. One has `card_declines = true`.
-- **About 25 Products**, with Unsplash image URLs:
+- **About 50 Products**, with Unsplash image URLs:
   - About 15 public, with open Pools at varied fill levels (some 2 people away from a Tier, one nearly at its deadline, one already locked, one completed with refunds so My Orders has history).
   - About 10 Hidden Listings with Demand Hits from 0 up to threshold−1. **"Walnut Dining Table" (Oak & Co.) must be at 9 of 10** for the demo.
 
