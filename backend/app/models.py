@@ -18,7 +18,7 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     id: int | None = Field(default=None, primary_key=True)
     name: str
-    role: str  # 'shopper' | 'retailer'
+    role: str  # 'shopper' | 'retailer' | 'admin'
     retailer_id: int | None = Field(default=None, foreign_key="retailers.id")
     is_simulated: bool = False
     card_label: str | None = None

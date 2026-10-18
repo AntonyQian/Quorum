@@ -21,6 +21,11 @@ def make_engine():
     return create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
 
+@pytest.fixture(autouse=True)
+def enable_demo_panel(monkeypatch):
+    monkeypatch.setattr("app.config.DEMO_PANEL_ENABLED", True)
+
+
 @pytest.fixture
 def engine():
     engine = make_engine()

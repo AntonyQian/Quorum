@@ -4,8 +4,8 @@ import Link from "next/link";
 import { layout, typeScale } from "@/design/tokens";
 import { useAccount } from "@/components/account-provider";
 import { AccountSwitcher } from "@/components/account-switcher";
+import { AdminNavButton } from "@/components/admin-nav-button";
 import { CartDrawer } from "@/components/cart-drawer";
-import { DemoDrawer } from "@/components/demo-drawer";
 import { NotificationBell } from "@/components/notification-bell";
 import { HowItWorksButton, OnboardingModal } from "@/components/onboarding-modal";
 import { RetailerPortalDrawer } from "@/components/retailer-portal-drawer";
@@ -28,11 +28,16 @@ function RoleTray() {
       <>
         <NotificationBell />
         <RetailerPortalDrawer />
+        <AdminNavButton />
       </>
     );
   }
 
-  return <NotificationBell />;
+  if (user?.role === "admin") {
+    return <AdminNavButton />;
+  }
+
+  return null;
 }
 
 export function TopBar() {
@@ -43,10 +48,9 @@ export function TopBar() {
     <header className={layout.topBar}>
       <div className={layout.topBarInner}>
         <Link href={home} className={typeScale.wordmark}>
-          Quorum
+          Quorum <span className="text-green-800 font-3xl ml-[-3px]">.</span>
         </Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <DemoDrawer />
           <AccountSwitcher />
           <div className="flex items-center gap-0.5 sm:gap-1">{RoleTray()}</div>
         </div>
